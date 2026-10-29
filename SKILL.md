@@ -319,6 +319,14 @@ Flip-Flop bodies are 40x40. Outputs $Q$ and $\overline{Q}$ are on the right edge
 - **Symptom:** Inverters have wires hanging directly down from the inversion bubble; AND/OR gates have wires entering from the top or bottom edges into input pins. The schematic looks sloppy, violates electrical drawing standards, and fails automated inspection.
 - **Strict Rule:** Every pin connection MUST be strictly perpendicular (normal) to the component boundary. Provide a clean 10-20px lead-in or lead-out segment before any orthogonal turn. `Circuit.connect()` and `inspect_circ.py` automatically enforce this invariant.
 
+### 6.7 Pitfall 7: Collector Gate Channel Overlap & Accidental Short-Circuits (Ошибка паразитного замыкания выходов при объединении в ИЛИ)
+- **Problem:** When collecting multiple gate outputs (e.g. 8 AND gates in an 8-to-1 multiplexer) into a multi-input OR gate, routing multiple signals through the same vertical channel ($X$) or allowing horizontal output lines to cross vertical channels of other gates causes Logisim to generate junction solder dots.
+- **Symptom:** Two or more AND gate outputs become electrically shorted together. Visually, it appears as though one AND gate branches into multiple inputs of the OR gate (a bizarre fork with dots), destroying signal independence.
+- **Strict Rule (Staircase Channel Routing):**
+  - Every single connection into a multi-input collector gate MUST have its own dedicated, strictly unique vertical channel $X_i$.
+  - Use nested staircase routing: gates located further from the centerline turn at outer $X$ channels, while gates closer to the centerline turn at inner $X$ channels.
+  - Zero output lines may intersect or share coordinates. `inspect_circ.py` automatically audits electrical nets to guarantee that no two gate outputs are ever shorted together.
+
 ---
 
 ## 7. Automated Circuit Inspection & Self-Check Tool (`inspect_circ.py`)
@@ -335,7 +343,8 @@ cmd.exe /c "python scripts/inspect_circ.py <path_to_circuit.circ>"
 3. **Wire Snapping & Orthogonality:** Confirms all coordinates snap to 10px grid and zero diagonal wires exist.
 4. **Dangling Wire Detection:** Finds any wire endpoint that terminates in mid-air (degree 1 with no component port).
 5. **Perpendicular Port Alignment:** Enforces that every wire enters and exits component ports perpendicularly along the port normal with at least 1-2 grid cells clearance (zero tangential/grazing connections).
-6. **Electrical Connectivity & Truth Table Trace:** Traces signal propagation from every input to every gate and output pin, printing the complete logical truth table matrix to verify functionality against real-world engineering models.
+6. **Electrical Short-Circuit Audit:** Detects multiple gate outputs shorted together on the same net (output contention), preventing accidental junction dots and false branching.
+7. **Electrical Connectivity & Truth Table Trace:** Traces signal propagation from every input to every gate and output pin, printing the complete logical truth table matrix to verify functionality against real-world engineering models.
 
 ---
 

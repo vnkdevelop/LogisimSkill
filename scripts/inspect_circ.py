@@ -370,6 +370,35 @@ def inspect_circuit(filepath: str, strict: bool = True) -> CircuitInspectionRepo
                     report.tangential_violations.append(msg)
                     report.errors.append(msg)
 
+    # 4.6 Electrical Net Output Contention / Short-Circuit Audit
+    # Multiple logic gate outputs driving the same net without tristate buffers is a fatal short-circuit.
+    visited_net_nodes: Set[Tuple[int, int]] = set()
+    for pt in list(adj.keys()):
+        if pt in visited_net_nodes:
+            continue
+        net_nodes = []
+        queue = [pt]
+        visited_net_nodes.add(pt)
+        while queue:
+            curr = queue.pop(0)
+            net_nodes.append(curr)
+            for neighbor in adj[curr]:
+                if neighbor not in visited_net_nodes:
+                    visited_net_nodes.add(neighbor)
+                    queue.append(neighbor)
+
+        gate_outs = []
+        for n_pt in net_nodes:
+            if n_pt in comp_ports:
+                for c_name, p_name in comp_ports[n_pt]:
+                    if c_name in gate_types and p_name == "out":
+                        gate_outs.append(f"{c_name}@{n_pt}")
+
+        if len(gate_outs) > 1:
+            report.errors.append(
+                f"Electrical Short Circuit: {len(gate_outs)} logic gate outputs are shorted together on the same net: {', '.join(gate_outs)}! Each gate output must drive its own dedicated receiver."
+            )
+
     # 5. Connectivity Trace & Matrix
     # Map gates to the output pins they drive
     gate_output_to_pin: Dict[Tuple[int, int], str] = {}

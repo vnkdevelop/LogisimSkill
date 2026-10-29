@@ -1176,8 +1176,22 @@ def build_multiplexer_4to1(project: Project, name: str = "main", with_enable: bo
     out_pin = c.add(Pin(660, 190, label="Y", facing="west", output=True, labelloc="east"))
     c.connect(or_gate, "out", out_pin, "pin")
 
-    for i in range(4):
-        c.connect(and_gates[i], "out", or_gate, f"in{i}", routing="hv")
+    # Connect 4 AND gates to OR gate using non-crossing staircase routing:
+    c.wire((440, 100), (510, 100))
+    c.wire((510, 100), (510, 170))
+    c.wire((510, 170), (530, 170))
+
+    c.wire((440, 160), (490, 160))
+    c.wire((490, 160), (490, 180))
+    c.wire((490, 180), (530, 180))
+
+    c.wire((440, 220), (490, 220))
+    c.wire((490, 220), (490, 200))
+    c.wire((490, 200), (530, 200))
+
+    c.wire((440, 280), (510, 280))
+    c.wire((510, 280), (510, 210))
+    c.wire((510, 210), (530, 210))
 
     # Address and Enable buses
     # in1 = A1 or !A1, in2 = A0 or !A0, in3 = E
@@ -1264,8 +1278,38 @@ def build_multiplexer_8to1(project: Project, name: str = "main", with_enable: bo
     out_pin = c.add(Pin(720, 270, label="Y", facing="west", output=True, labelloc="east"))
     c.connect(or_gate, "out", out_pin, "pin")
 
-    for i in range(8):
-        c.connect(and_gates[i], "out", or_gate, f"in{i}", routing="hv")
+    # Connect 8 AND gates to OR gate using non-crossing staircase routing:
+    c.wire((460, 100), (550, 100))
+    c.wire((550, 100), (550, 230))
+    c.wire((550, 230), (590, 230))
+
+    c.wire((460, 150), (530, 150))
+    c.wire((530, 150), (530, 240))
+    c.wire((530, 240), (590, 240))
+
+    c.wire((460, 200), (510, 200))
+    c.wire((510, 200), (510, 250))
+    c.wire((510, 250), (590, 250))
+
+    c.wire((460, 250), (490, 250))
+    c.wire((490, 250), (490, 260))
+    c.wire((490, 260), (590, 260))
+
+    c.wire((460, 300), (500, 300))
+    c.wire((500, 300), (500, 280))
+    c.wire((500, 280), (590, 280))
+
+    c.wire((460, 350), (520, 350))
+    c.wire((520, 350), (520, 290))
+    c.wire((520, 290), (590, 290))
+
+    c.wire((460, 400), (540, 400))
+    c.wire((540, 400), (540, 300))
+    c.wire((540, 300), (590, 300))
+
+    c.wire((460, 450), (560, 450))
+    c.wire((560, 450), (560, 310))
+    c.wire((560, 310), (590, 310))
 
     return c
 
