@@ -5,32 +5,51 @@ description: "Author, design, and validate pixel-perfect digital logic circuit f
 
 # Logisim Circuit Architect Skill
 
-A complete engineering specification and universal workflow for generating 100% compliant, pixel-perfect `.circ` circuit files that open natively in **Logisim 2.7.1** and **Logisim-evolution** with zero graphical glitches, full GUI toolbar interactivity, zero disconnects, and immediate simulation readiness.
+A complete engineering specification, reference manual, and universal synthesis workflow for generating 100% compliant, pixel-perfect `.circ` circuit files that open natively in **Logisim 2.7.1** and **Logisim-evolution** with zero graphical glitches, full GUI toolbar interactivity, zero disconnects, and immediate simulation readiness.
 
 ---
 
-## 1. Zero-Exploration Generation Protocol (No Scratch Scripts Needed)
+## 1. Universal Synthesis Architecture & Agent Workflow
 
-When tasked with creating or modifying a Logisim schematic, **never write temporary discovery scripts, test scripts, or environment probing commands**. 
+The agent operates as an autonomous, senior hardware and logic design engineer. The skill is completely flexible and universal: it empowers the agent to build **any digital circuit requested by the user**, whether simple or complex, whether built from high-level built-in library ICs, assembled from discrete logic gates, or organized as a hierarchical multi-sheet project.
 
-All component pin offsets, gate geometries, bus distribution methods, canonical circuit topologies, and validation routines are exhaustively documented in this skill and implemented in `scripts/logisim_builder.py` and `scripts/inspect_circ.py`.
+### 1.1 The Complete Synthesis Pipeline
 
-### The 4-Step Immediate Execution Pipeline:
-1. **Identify the Target Circuit & Truth Table:**
-   - Classify the target: Combinational (Adders, Subtractors, Encoders, Decoders, Multiplexers, Demultiplexers, Comparators, ALUs), Sequential (Latches, Flip-Flops, Registers, Counters, FSMs), or Modular (Subcircuits, Buses, Tunnels).
-   - Use the canonical Boolean equations and topologies defined in [Section 5](#5-canonical-circuit-topologies--boolean-logic-encyclopedia).
-2. **Choose Geometric Layout Projection:**
-   - Horizontal ($Left \to Right$): Decoders, multiplexers, adders, registers, comparators.
-   - Matrix ($Top \to Right$ or $Top \to Bottom$): Encoders, ROM/PLA matrices, diode grids.
-   - Do not dogmatically force all circuits into the same layout; mirror textbook conventions.
-3. **Generate the `.circ` File Directly:**
-   - Use `scripts/logisim_builder.py` pre-built generators (`build_matrix_encoder`, `build_decoder_2to4`, `build_multiplexer_4to1`, `build_full_adder`, `build_async_counter_4bit`, etc.) OR synthesize the XML structure directly.
-   - Project auto-saves with full `<mappings>` and `<toolbar>` blocks.
-4. **Audit in 0.5s with Built-in Inspector:**
-   ```bash
-   cmd.exe /c "python scripts/inspect_circ.py <path_to_circuit.circ>"
-   ```
-   No Java compilation or manual tests needed — the Python inspector statically verifies 100% compliance with zero false negatives.
+```mermaid
+flowchart TD
+    Req["User Request & Specifications<br>(Variant, Images, Component Constraints)"] --> Analysis["Analysis & Sourcing<br>Determine Canonical Scheme & Truth Table"]
+    Analysis --> Strategy{"Component Strategy"}
+    
+    Strategy -->|"Built-in ICs"| Macro["Logisim Libraries (lib 2, 3, 4)<br>Ready-made D-FF, Adders, Plexers, Counters"]
+    Strategy -->|"Discrete Gates"| Discrete["Gate-Level Assembly (lib 1)<br>NAND, NOR, AND, OR, XOR from Scratch"]
+    Strategy -->|"Hierarchical"| Modular["Subcircuit Definition<br>Build Sub-block -> Instantiate in Main"]
+    
+    Macro --> ScriptGen["Dynamic Python Script Generation<br>(using scripts/logisim_builder.py API)"]
+    Discrete --> ScriptGen
+    Modular --> ScriptGen
+    
+    ScriptGen --> Save["Emit .circ File<br>(with mandatory toolbar & mappings)"]
+    Save --> Audit["Automated Inspection (0.5s)<br>inspect_circ.py (Zero shorts, zero dangling wires)"]
+    Audit --> Delivery["Deliver Production-Ready Schematic"]
+```
+
+### 1.2 Core Execution Guidelines
+1. **Dynamic Script Generation:**
+   - The agent is **not restricted** to hardcoded template functions. The agent can and should write custom Python generator scripts tailored to the user's exact requirements using the clean object-oriented builder API (`Project`, `Circuit`, `Pin`, `Component`, `Subcircuit`, `wire`, `connect`, `add_vbus`, `add_hbus`).
+   - The pre-built functions in `scripts/logisim_builder.py` (`build_matrix_encoder`, `build_decoder_2to4`, `build_multiplexer_4to1`, `build_full_adder`, `build_async_counter_4bit`, etc.) serve as high-quality reference implementations and rapid shortcuts, but the agent dynamically synthesizes any custom schematic on demand.
+2. **Sourcing Canonical Reference Schematics:**
+   - When a requested circuit is non-trivial, unfamiliar, or models a specific real-world chip/assignment (e.g. 74LS138, 74LS151, specific textbook counter or divider):
+     - Check authoritative textbooks, datasheets, or perform a targeted web search for the standard circuit diagram and truth table.
+     - Verify that the schematic is widely recognized and canonical in academic/engineering practice.
+     - Faithfully implement that scheme in Logisim coordinates.
+3. **Pragmatic Testing Policy (No Blind Exploration vs Verifying Complex Logic):**
+   - **Do NOT waste turns writing throwaway discovery tests** just to figure out Logisim XML syntax or basic pin coordinates. All pin geometries, offsets, grid snapping, and routing invariants are fully documented in this skill.
+   - For standard circuits (decoders, multiplexers, encoders, adders, basic counters), immediately generate the `.circ` file.
+   - For **genuinely complex, novel, or intricate circuits** (e.g. multi-stage state machines, complex hazard-free feedback latches, custom ALUs), functional testing and truth-table verification using `scripts/inspect_circ.py` or simulation is welcomed and encouraged.
+4. **Strict Fidelity to User Constraints:**
+   - If the user specifies: *"use built-in D-flip-flop"* $\implies$ use `lib="4" name="D Flip-Flop"`.
+   - If the user specifies: *"assemble D-flip-flop from discrete logic gates"* $\implies$ build it from discrete NAND/NOR gates.
+   - If the user provides a reference screenshot or wiring diagram $\implies$ recreate that exact layout and pin arrangement.
 
 ---
 
@@ -202,7 +221,21 @@ Gates facing `east` have their output at `(0, 0)` relative to `loc`.
 | **NOT Gate** | 1 | `in: (-30, 0)` | `(0, 0)` |
 | **Buffer** | 1 | `in: (-20, 0)` | `(0, 0)` |
 
-### 4.3 Memory / Sequential Elements (`lib="4"`)
+### 4.3 Multiplexers & Decoders (`lib="2"`)
+| Component | Default Attributes | Pin Name | dx | dy | Description |
+| :--- | :--- | :--- | :---: | :---: | :--- |
+| **Multiplexer** | `select="1"` (2-to-1) | `in0`<br>`in1`<br>`out`<br>`sel` | `-30`<br>`-30`<br>`0`<br>`-20` | `-10`<br>`10`<br>`0`<br>`20` | Input 0<br>Input 1<br>Selected Output<br>Select line |
+| **Demultiplexer**| `select="1"` (1-to-2) | `in`<br>`out0`<br>`out1`<br>`sel` | `-20`<br>`0`<br>`0`<br>`-10` | `0`<br>`-10`<br>`10`<br>`20` | Data In<br>Output 0<br>Output 1<br>Select line |
+| **Decoder** | `select="2"` (2-to-4) | `sel`<br>`out0..out3` | `-20`<br>`0` | `0`<br>`-30..0` | Select address<br>Decoded outputs |
+
+### 4.4 Arithmetic Modules (`lib="3"`)
+| Component | Pin Name | dx | dy | Description |
+| :--- | :--- | :---: | :---: | :--- |
+| **Adder** | `inA`<br>`inB`<br>`out`<br>`cin`<br>`cout` | `-40`<br>`-40`<br>`0`<br>`-20`<br>`-20` | `-10`<br>`10`<br>`0`<br>`-20`<br>`20` | Input A<br>Input B<br>Sum Out<br>Carry In<br>Carry Out |
+| **Subtractor** | `inA`<br>`inB`<br>`out`<br>`bin`<br>`bout` | `-40`<br>`-40`<br>`0`<br>`-20`<br>`-20` | `-10`<br>`10`<br>`0`<br>`-20`<br>`20` | Minuend A<br>Subtrahend B<br>Diff Out<br>Borrow In<br>Borrow Out |
+| **Comparator** | `inA`<br>`inB`<br>`gt`<br>`eq`<br>`lt` | `-40`<br>`-40`<br>`0`<br>`0`<br>`0` | `-10`<br>`10`<br>`-10`<br>`0`<br>`10` | Input A<br>Input B<br>Output $A > B$<br>Output $A = B$<br>Output $A < B$ |
+
+### 4.5 Memory / Sequential Elements (`lib="4"`)
 Flip-Flop bodies are 40x40. Outputs $Q$ and $\overline{Q}$ are on the right edge:
 | Component | Pin Name | dx | dy | Description |
 | :--- | :--- | :---: | :---: | :--- |
@@ -212,147 +245,130 @@ Flip-Flop bodies are 40x40. Outputs $Q$ and $\overline{Q}$ are on the right edge
 | **Register** | `in`<br>`out`<br>`clock`<br>`clear`<br>`enable` | `-30`<br>`0`<br>`-20`<br>`-10`<br>`-30` | `0`<br>`0`<br>`20`<br>`20`<br>`10` | Parallel Data In<br>Parallel Data Out<br>Clock<br>Clear<br>Enable |
 | **Counter** | `out`<br>`in`<br>`clock`<br>`clear`<br>`load`<br>`count`<br>`carry` | `0`<br>`-30`<br>`-20`<br>`-10`<br>`-30`<br>`-30`<br>`0` | `0`<br>`0`<br>`20`<br>`20`<br>`-10`<br>`10`<br>`10` | Counter value out<br>Parallel load in<br>Clock<br>Clear<br>Load enable<br>Count enable<br>Carry output |
 
-### 4.4 Arithmetic (`lib="3"`)
-| Component | Pin Name | dx | dy | Description |
-| :--- | :--- | :---: | :---: | :--- |
-| **Adder** | `inA`<br>`inB`<br>`out`<br>`cin`<br>`cout` | `-40`<br>`-40`<br>`0`<br>`-20`<br>`-20` | `-10`<br>`10`<br>`0`<br>`-20`<br>`20` | Input A<br>Input B<br>Sum Out<br>Carry In<br>Carry Out |
-| **Subtractor** | `inA`<br>`inB`<br>`out`<br>`bin`<br>`bout` | `-40`<br>`-40`<br>`0`<br>`-20`<br>`-20` | `-10`<br>`10`<br>`0`<br>`-20`<br>`20` | Minuend A<br>Subtrahend B<br>Diff Out<br>Borrow In<br>Borrow Out |
-| **Comparator** | `inA`<br>`inB`<br>`gt`<br>`eq`<br>`lt` | `-40`<br>`-40`<br>`0`<br>`0`<br>`0` | `-10`<br>`10`<br>`-10`<br>`0`<br>`10` | Input A<br>Input B<br>Output $A > B$<br>Output $A = B$<br>Output $A < B$ |
+---
+
+## 5. Dual-Track Implementation Patterns
+
+The user may request creating a circuit either using ready-made built-in Logisim blocks or assembled from scratch using discrete logic gates. The agent must handle both effortlessly.
+
+### 5.1 D Flip-Flop: Built-in vs Discrete Assembly
+
+#### Option A: Using Built-in Macro Element (`lib="4"`)
+```python
+# Place ready-made D-FF from Logisim Memory library
+dff = c.add(DFlipFlop(220, 140))
+clk = c.add(Clock(100, 160))
+c.connect(clk, "out", dff, "clock")
+```
+
+#### Option B: Assembling Gated D Latch from Discrete NAND Gates (`lib="1"`)
+A transparent D-Latch consists of 4 discrete NAND gates and 1 inverter:
+```python
+# Inputs
+d_pin = c.add(Pin(80, 100, label="D"))
+e_pin = c.add(Pin(80, 180, label="E"))
+
+# Discrete logic:
+# NAND1: (D & E)
+# Inverter for D: !D
+# NAND2: (!D & E)
+# Cross-coupled NAND3 (Q) and NAND4 (!Q)
+nand1 = c.add(NandGate(240, 100, size=30))
+not_d = c.add(NotGate(140, 140, size=30))
+nand2 = c.add(NandGate(240, 180, size=30))
+nand3 = c.add(NandGate(360, 110, size=30))
+nand4 = c.add(NandGate(360, 170, size=30))
+
+q_out = c.add(Pin(420, 110, label="Q", facing="west", output=True))
+notq_out = c.add(Pin(420, 170, label="!Q", facing="west", output=True))
+```
+
+#### Option C: Edge-Triggered Master-Slave D Flip-Flop
+Created by cascading two D-Latches in series with opposite clock polarity:
+1. **Master Latch:** Clocked by $\overline{CLK}$.
+2. **Slave Latch:** Clocked by $CLK$.
+3. When $CLK=0$, Master tracks $D$; when $CLK$ rises to $1$, Master latches and Slave updates output $Q$.
+
+### 5.2 Adders: Built-in vs Discrete Assembly
+
+#### Option A: Built-in Macro Adder (`lib="3"`)
+```python
+adder = c.add(Adder(240, 150, width=4)) # 4-bit parallel adder
+```
+
+#### Option B: Discrete Full Adder on XOR, AND, OR Gates
+```python
+build_full_adder(proj, name="Full_Adder")
+# Stage 1: Half Adder (A ^ B, A & B)
+# Stage 2: Second Half Adder ((A ^ B) ^ Cin)
+# Stage 3: Carry combine OR gate
+```
+
+### 5.3 Encoders & Decoders: Built-in vs Discrete Assembly
+- **Decoders:** Built-in `lib="2" name="Decoder"` vs discrete address inverters and AND gates (`build_decoder_2to4`).
+- **Encoders:** Matrix layout with diodes/OR-gates (`build_matrix_encoder`).
+  - *Rule of $X_0$:* In pure binary encoders, $X_0$ is left disconnected (no dangling wires) because $0_{10} = 00000_2$. If a "Valid / Activity" flag is requested, connect all inputs including $X_0$ to an OR gate $V = X_0 \lor \dots \lor X_{N-1}$.
 
 ---
 
-## 5. Canonical Circuit Topologies & Boolean Logic Encyclopedia
+## 6. Subcircuits & Hierarchical Modular Design
 
-### 5.1 Encoders (Шифраторы)
-A binary encoder converts a 1-out-of-$N$ (unary/positional) code on inputs $X_0 \dots X_{N-1}$ into an $M$-bit binary number ($M = \lceil\log_2 N\rceil$) on outputs $Y_{M-1} \dots Y_0$.
+When building complex systems (e.g., multi-bit registers, ALUs, memory arrays), build sub-blocks as dedicated subcircuits, then instantiate them in the `main` circuit:
 
-- **General Formula for OR-Gate Synthesis:**
-  $$\text{Input } X_i \text{ connects to OR gate } Y_k \iff ((i \gg k) \ \& \ 1) == 1$$
-- **The Rule for $X_0$ (Why $X_0$ is Not Connected):**
-  - In binary, $0_{10} = \mathbf{00000_2}$.
-  - The outputs $Y_k$ are produced by OR gates. A zero on all outputs requires that **no input signal activates any OR gate**.
-  - Therefore, $X_0$ does not connect to ANY output OR gate.
-  - An unconnected input $X_0$ is mathematically and schematically correct. **Never draw a dangling wire stub on $X_0$.**
-- **Canonical Topologies:**
-  1. **Matrix Encoder (Top-to-Right):** Inputs $X_0 \dots X_{N-1}$ sit along the top ($Y=80$) facing south with $\ge 40$ px pitch. Vertical bus lines drop down and terminate strictly at their lowest connected gate tap. Ideal for $\ge 8$ inputs.
-  2. **Horizontal Encoder (Left-to-Right):** Inputs $X_0 \dots X_{N-1}$ sit vertically on the left. Vertical distribution buses feed horizontally into OR gates. Standard for 4-to-2 and 8-to-3 encoders.
-- **Priority Encoders (with Activity Flag $V$ / $EO$ / $GS$):**
-  If the assignment requires distinguishing between "$X_0$ is active ($0_{10}$ selected)" vs "no inputs are active", add an OR gate for the Valid flag:
-  $$V = X_0 \lor X_1 \lor \dots \lor X_{N-1}$$
+```python
+proj = Project(name="main")
 
-### 5.2 Decoders (Дешифраторы)
-A decoder converts an $n$-bit binary address $A_{n-1} \dots A_0$ into $2^n$ unary output lines $Y_0 \dots Y_{2^n - 1}$.
+# 1. Define Subcircuit: 1-bit Full Adder
+fa = proj.get_or_create_circuit("Full_Adder_1Bit")
+# Add pins: A, B, Cin as inputs, S, Cout as outputs, gates and wires...
 
-- **2-to-4 Decoder Logic (with Enable $E$):**
-  $$Y_0 = \overline{A_1} \cdot \overline{A_0} \cdot E$$
-  $$Y_1 = \overline{A_1} \cdot A_0 \cdot E$$
-  $$Y_2 = A_1 \cdot \overline{A_0} \cdot E$$
-  $$Y_3 = A_1 \cdot A_0 \cdot E$$
-- **3-to-8 Decoder Logic:**
-  Each output $Y_i$ is driven by a 3-input (or 4-input with $E$) AND gate corresponding to the minterm $m_i$:
-  $$Y_i = A_2^{(b_2)} \cdot A_1^{(b_1)} \cdot A_0^{(b_0)} \cdot E$$
+# 2. In Main Circuit: Instantiate 4 copies to form a 4-bit Ripple Adder
+main_c = proj.main
+fa0 = main_c.add(Subcircuit("Full_Adder_1Bit", 200, 100))
+fa1 = main_c.add(Subcircuit("Full_Adder_1Bit", 320, 100))
+fa2 = main_c.add(Subcircuit("Full_Adder_1Bit", 440, 100))
+fa3 = main_c.add(Subcircuit("Full_Adder_1Bit", 560, 100))
 
-### 5.3 Multiplexers (Мультиплексоры)
-A multiplexer routes one of $2^n$ data inputs $D_i$ to a single output $Y$ according to an $n$-bit address $A$.
-
-- **4-to-1 Multiplexer Logic:**
-  $$Y = (D_0 \cdot \overline{A_1} \cdot \overline{A_0} \cdot E) \lor (D_1 \cdot \overline{A_1} \cdot A_0 \cdot E) \lor (D_2 \cdot A_1 \cdot \overline{A_0} \cdot E) \lor (D_3 \cdot A_1 \cdot A_0 \cdot E)$$
-- **Staircase Collector Routing Rule (Crucial Anti-Short Rule):**
-  When collecting the outputs of all AND gates into the final multi-input OR gate:
-  - Every single connection must have its own strictly dedicated vertical channel $X_i$.
-  - Use nested staircase routing: outer AND gates route through outer vertical channels; inner AND gates route through inner vertical channels.
-  - **Never route a vertical wire across another gate's horizontal output line** (Logisim creates an automatic solder junction dot, shorting the gates together).
-
-### 5.4 Demultiplexers (Демультиплексоры)
-A demultiplexer directs a single input signal $DI$ to one of $2^n$ outputs $Y_i$ according to address lines $A$.
-
-- **1-to-4 Demultiplexer Logic:**
-  $$Y_i = DI \cdot (\text{Address} == i) \cdot E$$
-- Structure: $2^n$ discrete AND gates, each receiving $DI$, $E$, and the appropriate true/inverted address lines.
-
-### 5.5 Adders & Subtractors (Сумматоры и вычитатели)
-- **1-bit Half Adder:**
-  $$S = A \oplus B, \quad C = A \cdot B$$
-- **1-bit Full Adder:**
-  $$P = A \oplus B, \quad S = P \oplus C_{in}$$
-  $$C_{out} = (A \cdot B) \lor (P \cdot C_{in})$$
-- **1-bit Half Subtractor:**
-  $$D = A \oplus B, \quad B_{out} = \overline{A} \cdot B$$
-- **1-bit Full Subtractor:**
-  $$D = A \oplus B \oplus B_{in}, \quad B_{out} = \overline{A}B \lor \overline{(A \oplus B)}B_{in}$$
-- **Multi-bit Ripple Carry Adder:** Cascade $N$ Full Adders where $C_{out}[i] \to C_{in}[i+1]$.
-
-### 5.6 Comparators (Компараторы)
-- **1-bit Magnitude Comparator:**
-  $$GT\ (A > B) = A \cdot \overline{B}$$
-  $$EQ\ (A = B) = \overline{A \oplus B}\quad (\text{XNOR})$$
-  $$LT\ (A < B) = \overline{A} \cdot B$$
-
-### 5.7 Latches & Flip-Flops (Триггеры)
-- **RS Latch (NOR-based):**
-  Cross-coupled NOR gates: $Q = \overline{R \lor \overline{Q}}$, $\overline{Q} = \overline{S \lor Q}$.
-  $S=1 \implies Q=1$; $R=1 \implies Q=0$; $S=R=0 \implies$ Memory; $S=R=1 \implies$ Forbidden.
-- **D Flip-Flop (Toggle Divider):**
-  Connecting $\overline{Q} \to D$ creates a frequency divider (divides clock frequency by 2).
-- **T Flip-Flop:**
-  Toggles output $Q$ on clock edge when $T=1$. Built with D Flip-Flop using $D = T \oplus Q$.
-- **J-K Flip-Flop:**
-  Universal flip-flop: $J=1, K=0 \implies Set$; $J=0, K=1 \implies Reset$; $J=K=1 \implies Toggle$.
-
-### 5.8 Counters (Счетчики)
-- **Asynchronous (Ripple) Up-Counter:**
-  Cascade $N$ toggle flip-flops ($\overline{Q} \to D$). The clock of stage $i+1$ is driven by $\overline{Q}_i$ (for rising-edge triggered FFs) or $Q_i$ (for falling-edge triggered FFs).
-- **Synchronous Binary Counter:**
-  All flip-flops share a common clock. Flip-flop $i$ toggles only when all preceding bits are 1:
-  $$T_0 = 1, \quad T_1 = Q_0, \quad T_2 = Q_0 \cdot Q_1, \quad T_3 = Q_0 \cdot Q_1 \cdot Q_2$$
-- **Modulo-$N$ Counter:**
-  A binary counter equipped with an AND gate detecting state $N$ connected to the asynchronous Clear / Reset line.
-
-### 5.9 Shift Registers (Сдвиговые регистры)
-- **Serial-In Parallel-Out (SIPO):** Cascade $N$ D Flip-Flops: $D_{in} \to D_0$, $Q_0 \to D_1 \dots Q_{N-2} \to D_{N-1}$. All clock inputs share the common clock bus.
-- **Parallel-In Parallel-Out (PIPO):** $N$ independent D Flip-Flops clocked simultaneously.
-- **Johnson Counter (Twisted Ring):** SIPO shift register where $\overline{Q}_{N-1}$ is fed back to $D_0$. Cycles through $2N$ states.
-
-### 5.10 Subcircuits & Modular Hierarchies
-- In Logisim, any circuit `<circuit name="SubName">` within the project can be instantiated in another circuit as a modular black box:
-  `<comp lib="#" loc="(X,Y)" name="SubName"/>`
-- Pins inside the subcircuit define its external boundary ports.
-- **Tunnels (`Tunnel`):** Use tunnels for clean distribution of clocks, resets, or complex multi-wire buses across the sheet without spaghetti wires.
+# Wire Cout of fa[i] to Cin of fa[i+1]
+main_c.connect(fa0, "Cout", fa1, "Cin")
+main_c.connect(fa1, "Cout", fa2, "Cin")
+main_c.connect(fa2, "Cout", fa3, "Cin")
+```
 
 ---
 
-## 6. Critical Engineering Pitfalls & Post-Mortem (Архитектурные ошибки и антипаттерны)
+## 7. Critical Engineering Pitfalls & Post-Mortem
 
-### 6.1 Pitfall 1: Multi-Input Gate Body Expansion (Ловушка расширения высоты многовходовых вентилей)
+### 7.1 Pitfall 1: Multi-Input Gate Body Expansion
 - **Problem:** When an OR or AND gate has $> 5$ inputs (e.g. 8, 10, or 20 inputs), Logisim dynamically expands the vertical height:
   $$\text{Height} = \max(10 \times \text{inputs},\ \text{size})$$
   A 10-input gate expands to 110 px in height ($Y_g \pm 50$), and a 20-input gate expands to 210 px in height ($Y_g \pm 100$).
 - **Strict Rule:** Allocate generous vertical pitch between multi-input gate centers:
   $$\Delta Y_{pitch} \ge \max(120,\ K_{inputs} \times 14) + 60\text{ px}$$
 
-### 6.2 Pitfall 2: Routing Horizontal Wires Through Gate Center (Ошибка короткого замыкания и красной петли)
+### 7.2 Pitfall 2: Routing Horizontal Wires Through Gate Center
 - **Problem:** For an East-facing gate at $(X_g, Y_g)$, its **OUTPUT PIN** is located exactly at $(X_g, Y_g)$. If an input tap or pass-through wire is routed along $Y = Y_g$, it penetrates into the gate body and touches the output pin $(X_g, Y_g)$, shorting the output back into its own inputs. This turns the wire **bright red** with an unconnected blue `X`.
 - **Strict Rule:** **The horizontal coordinate $Y = Y_g$ is strictly reserved for the output wire to the right.** Never route an input wire or bus tap along $Y = Y_g$.
 
-### 6.3 Pitfall 3: Dangling Lines & Dead-End Wire Stubs (Ошибка висячих проводников)
+### 7.3 Pitfall 3: Dangling Lines & Dead-End Wire Stubs
 - **Problem:** 
   1. Pulling vertical input lines down past the lowest gate into empty space.
   2. Drawing an artificial 20-40px wire stub on an unconnected input (like $X_0$) that ends in mid-air.
 - **Strict Rule:** Every wire segment **must connect two valid points** (either component ports or a junction with another wire). Vertical bus lines stop strictly at the lowest gate port. Unconnected pins (like $X_0$) have zero attached wires.
 
-### 6.4 Pitfall 4: Gate Label Clutter (Засорение схемы текстовыми метками вентилей)
+### 7.4 Pitfall 4: Gate Label Clutter
 - **Problem:** Adding labels like `OR_Y4`, `AND_0`, `NOT` to internal logic gates.
 - **Strict Rule:** **Only input pins and output pins may carry labels.** All logic gates and flip-flops must have `label=""`.
 
-### 6.5 Pitfall 5: Layout Dogmatism & Over-Constraining (Ловушка жесткого хардкода компоновки)
+### 7.5 Pitfall 5: Layout Dogmatism & Over-Constraining
 - **Problem:** Forcing every single circuit into the exact same rigid topology.
 - **Strict Rule:** Mirror canonical textbook topologies (e.g., decoders and adders flow left-to-right, matrix encoders flow top-to-right, control buses flow from bottom to top).
 
-### 6.6 Pitfall 6: Tangential / Grazing Port Connections (Ошибка касательного подключения к пинам)
+### 7.6 Pitfall 6: Tangential / Grazing Port Connections
 - **Problem:** Routing a wire that turns directly on the coordinate of a component pin (0px lead-in/lead-out), causing the wire to run tangentially along the side of the component or drop vertically right off the tip of an inverter.
 - **Strict Rule:** Every pin connection MUST be strictly perpendicular (normal) to the component boundary. Provide a clean 10-20px lead-in or lead-out segment before any orthogonal turn.
 
-### 6.7 Pitfall 7: Collector Gate Channel Overlap & Accidental Short-Circuits (Ошибка паразитного замыкания выходов)
+### 7.7 Pitfall 7: Collector Gate Channel Overlap & Accidental Short-Circuits
 - **Problem:** When collecting multiple gate outputs into a multi-input OR gate, routing multiple signals through the same vertical channel or allowing horizontal output lines to cross vertical channels of other gates causes Logisim to generate junction solder dots.
 - **Strict Rule (Staircase Channel Routing):**
   - Every connection into a collector gate MUST have its own dedicated, strictly unique vertical channel $X_i$.
@@ -360,7 +376,7 @@ A demultiplexer directs a single input signal $DI$ to one of $2^n$ outputs $Y_i$
 
 ---
 
-## 7. Automated Circuit Inspection & Self-Check Tool (`inspect_circ.py`)
+## 8. Automated Circuit Inspection & Self-Check Tool (`inspect_circ.py`)
 
 Always run the built-in circuit inspector before finalizing any `.circ` file:
 
@@ -379,88 +395,49 @@ cmd.exe /c "python scripts/inspect_circ.py <path_to_circuit.circ>"
 
 ---
 
-## 8. Python API & Universal Code Recipes
+## 9. Dynamic Python Generation Recipes
 
-### Recipe 1: Universal Canonical Block Generation
+### Recipe: Arbitrary Logic Synthesis Script
+An agent can write a custom script like this in seconds for any circuit:
+
 ```python
+import os
 from scripts.logisim_builder import (
-    Project,
-    build_matrix_encoder,
-    build_decoder_2to4,
-    build_multiplexer_4to1,
-    build_demultiplexer_1to4,
-    build_half_adder,
-    build_full_adder,
-    build_half_subtractor,
-    build_comparator_1bit,
-    build_rs_latch,
-    build_shift_register_4bit,
-    build_async_counter_4bit
+    Project, Pin, AndGate, OrGate, NotGate, XorGate,
+    DFlipFlop, Clock, Subcircuit
 )
 
 # 1. Initialize project
 proj = Project(name="main")
-
-# 2. Add assigned circuit to main
-build_matrix_encoder(
-    proj,
-    name="main",
-    num_inputs=20,
-    title="Шифратор 20 в 5: число 19 (10011_2) (Вариант 9, Табл. 4.2)",
-    target_variant=19,
-    with_valid=False
-)
-
-# 3. Add other requested blocks as separate subcircuits in the same project
-build_decoder_2to4(proj, name="Дешифратор_2_в_4", with_enable=True)
-build_multiplexer_4to1(proj, name="Мультиплексор_4_в_1", with_enable=True)
-build_full_adder(proj, name="Полный_Сумматор")
-build_async_counter_4bit(proj, name="Двоичный_Счетчик_4бит")
-
-# 4. Save (automatically writes full <mappings> and <toolbar>)
-proj.save("my_circuits.circ")
-```
-
-### Recipe 2: Custom Arbitrary Logic Synthesis
-```python
-from scripts.logisim_builder import Project, Pin, AndGate, OrGate, NotGate, XorGate
-
-proj = Project(name="main")
 c = proj.main
 
-# Inputs
+# 2. Add input and output pins (labeled)
 a = c.add(Pin(80, 100, label="A"))
 b = c.add(Pin(80, 160, label="B"))
+cin = c.add(Pin(80, 240, label="Cin"))
 
-# Discrete gates (unlabeled)
+# 3. Add internal logic gates (unlabeled)
 xor1 = c.add(XorGate(240, 100, size=50))
 and1 = c.add(AndGate(240, 180, size=50))
+xor2 = c.add(XorGate(400, 120, size=50))
+and2 = c.add(AndGate(400, 240, size=50))
+or1 = c.add(OrGate(520, 210, size=50))
 
-# Outputs
-s = c.add(Pin(320, 100, label="S", facing="west", output=True))
-co = c.add(Pin(320, 180, label="C", facing="west", output=True))
+# 4. Add output pins (labeled)
+s = c.add(Pin(580, 120, label="S", facing="west", output=True))
+cout = c.add(Pin(580, 210, label="Cout", facing="west", output=True))
 
-# Clean connections
-c.connect(xor1, "out", s, "pin")
-c.connect(and1, "out", co, "pin")
+# 5. Wire ports using clean orthogonal routes
+c.connect(xor2, "out", s, "pin")
+c.connect(or1, "out", cout, "pin")
 
-# Bus distribution
-c.wire(a.get_port("pin"), (120, 100))
-c.add_vbus(120, [100, 80, 160])
-c.wire((120, 80), (180, 80))
-c.wire((120, 160), (190, 160))
-
-c.wire(b.get_port("pin"), (140, 160))
-c.add_vbus(140, [160, 120, 200])
-c.wire((140, 120), (180, 120))
-c.wire((140, 200), (190, 200))
-
-proj.save("custom_logic.circ")
+# Save project
+proj.save("custom_circuit.circ")
 ```
 
 ---
 
-## 9. Verification Checklist
+## 10. Verification Checklist
 
 Before delivering any `.circ` file, verify:
 

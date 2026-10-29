@@ -106,7 +106,8 @@ class Component:
 
     def to_xml(self) -> ET.Element:
         elem = ET.Element("comp")
-        elem.set("lib", str(self.lib))
+        if self.lib is not None:
+            elem.set("lib", str(self.lib))
         elem.set("loc", str(self.loc))
         elem.set("name", self.name)
         for attr_name, attr_val in self.attrs.items():
@@ -553,6 +554,12 @@ def HexDigitDisplay(x: int, y: int) -> Component:
 def Text(x: int, y: int, text: str, font: str = "SansSerif plain 12", halign: str = "center") -> Component:
     attrs = {"text": text, "font": font, "halign": halign}
     return Component(lib=6, name="Text", loc=(x, y), attrs=attrs, ports={})
+
+
+def Subcircuit(name: str, x: int, y: int, ports: Optional[Dict[str, Tuple[int, int]]] = None) -> Component:
+    """Instantiates a named subcircuit defined within the same Logisim project."""
+    return Component(lib=None, name=name, loc=(x, y), attrs={}, ports=ports or {})
+
 
 
 # ==============================================================================
