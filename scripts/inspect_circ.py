@@ -60,7 +60,7 @@ def get_component_port_info(comp_name: str, loc: Tuple[int, int], attrs: Dict[st
     x, y = loc
     facing = attrs.get("facing", "east")
     size = int(attrs.get("size", "50")) if "size" in attrs else 50
-    inputs = int(attrs.get("inputs", "2")) if "inputs" in attrs else 2
+    inputs = int(attrs.get("inputs", "5")) if "inputs" in attrs else 5
 
     facing_normals = {
         "east": (1, 0),
