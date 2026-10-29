@@ -26,98 +26,162 @@ from typing import Dict, List, Tuple, Set, Optional, Any
 
 # Standard Gate Dimensions in Logisim 2.7.1
 def get_gate_input_offsets(inputs: int, size: int) -> List[int]:
-    """Calculates exact dy offsets for inputs of a gate facing East."""
-    eff_height = max(10 * inputs, size)
-    span = eff_height - 10
-    if inputs == 1:
-        return [0]
-    elif inputs == 2:
-        return [-10, 10]
-    elif inputs % 2 == 1:
-        # Odd: center input at 0, symmetric pairs
-        k = (inputs - 1) // 2
-        step = (span // 2) // k
-        step = max(10, (step // 10) * 10)
-        return [i * step for i in range(-k, k + 1)]
+    """Calculates exact dy offsets for inputs of a gate facing East in Logisim."""
+    if inputs <= 3:
+        if size < 40:  # Narrow (30)
+            delta, step, skip = -5, 10, 10
+        elif size >= 60 or inputs <= 2:
+            delta, step, skip = -10, 20, 20
+        else:  # size 50, inputs 3
+            delta, step, skip = -10, 20, 20
+    elif inputs == 4 and size >= 60:
+        delta, step, skip = -5, 20, 0
     else:
-        # Even: no input at 0, symmetric pairs
-        k = inputs // 2
-        half_span = span // 2
-        step = half_span // k
-        step = max(10, (step // 10) * 10)
-        offsets = []
-        for i in range(-k, k + 1):
-            if i != 0:
-                val = i * step
-                if val > 0:
-                    val = max(10, val)
-                else:
-                    val = min(-10, val)
-                offsets.append(val)
-        return offsets
+        delta, step, skip = -5, 10, 10
+
+    offsets = []
+    for i in range(inputs):
+        if inputs % 2 == 1:
+            dy = delta * (inputs - 1) + step * i
+        else:
+            dy = delta * inputs + step * i
+            if i >= inputs // 2:
+                dy += skip
+        offsets.append(dy)
+    return offsets
 
 
-def get_component_ports(comp_name: str, loc: Tuple[int, int], attrs: Dict[str, str]) -> Dict[str, Tuple[int, int]]:
-    """Calculates all port coordinates for a component based on type, loc, and attrs."""
+def get_component_port_info(comp_name: str, loc: Tuple[int, int], attrs: Dict[str, str]) -> Dict[str, Dict[str, Any]]:
+    """
+    Calculates all port coordinates and expected outward normal unit vectors for a component.
+    The normal vector (nx, ny) defines the direction a connected wire MUST travel AWAY from the port.
+    Any wire segment connected to the port that is not collinear with (nx, ny) is a tangential defect.
+    """
     x, y = loc
     facing = attrs.get("facing", "east")
     size = int(attrs.get("size", "50")) if "size" in attrs else 50
     inputs = int(attrs.get("inputs", "2")) if "inputs" in attrs else 2
 
+    facing_normals = {
+        "east": (1, 0),
+        "west": (-1, 0),
+        "south": (0, 1),
+        "north": (0, -1)
+    }
+
     ports = {}
 
     if comp_name == "Pin":
-        ports["pin"] = (x, y)
-    elif comp_name in ("Constant", "Power", "Ground", "Clock"):
-        ports["out"] = (x, y)
+        ports["pin"] = {"pt": (x, y), "normal": facing_normals.get(facing, (1, 0))}
+    elif comp_name in ("Constant", "Clock"):
+        ports["out"] = {"pt": (x, y), "normal": facing_normals.get(facing, (1, 0))}
+    elif comp_name == "Power":
+        ports["out"] = {"pt": (x, y), "normal": (0, -1)}
+    elif comp_name == "Ground":
+        ports["out"] = {"pt": (x, y), "normal": (0, 1)}
     elif comp_name == "Tunnel":
-        ports["pin"] = (x, y)
+        ports["pin"] = {"pt": (x, y), "normal": facing_normals.get(facing, (-1, 0))}
     elif comp_name == "NOT Gate":
         gate_size = int(attrs.get("size", "30")) if "size" in attrs else 30
         if facing == "east":
-            ports["out"] = (x, y)
-            ports["in"] = (x - gate_size, y)
+            ports["out"] = {"pt": (x, y), "normal": (1, 0)}
+            ports["in"] = {"pt": (x - gate_size, y), "normal": (-1, 0)}
         elif facing == "west":
-            ports["out"] = (x, y)
-            ports["in"] = (x + gate_size, y)
+            ports["out"] = {"pt": (x, y), "normal": (-1, 0)}
+            ports["in"] = {"pt": (x + gate_size, y), "normal": (1, 0)}
         elif facing == "south":
-            ports["out"] = (x, y)
-            ports["in"] = (x, y - gate_size)
+            ports["out"] = {"pt": (x, y), "normal": (0, 1)}
+            ports["in"] = {"pt": (x, y - gate_size), "normal": (0, -1)}
         elif facing == "north":
-            ports["out"] = (x, y)
-            ports["in"] = (x, y + gate_size)
+            ports["out"] = {"pt": (x, y), "normal": (0, -1)}
+            ports["in"] = {"pt": (x, y + gate_size), "normal": (0, 1)}
     elif comp_name in ("AND Gate", "OR Gate", "NAND Gate", "NOR Gate", "XOR Gate", "XNOR Gate"):
+        eff_size = size + (10 if comp_name in ("NAND Gate", "NOR Gate", "XOR Gate", "XNOR Gate") else 0)
+        offsets = get_gate_input_offsets(inputs, size)
         if facing == "east":
-            ports["out"] = (x, y)
-            offsets = get_gate_input_offsets(inputs, size)
+            ports["out"] = {"pt": (x, y), "normal": (1, 0)}
             for i, dy in enumerate(offsets):
-                ports[f"in{i}"] = (x - size, y + dy)
+                ports[f"in{i}"] = {"pt": (x - eff_size, y + dy), "normal": (-1, 0)}
         elif facing == "west":
-            ports["out"] = (x, y)
-            offsets = get_gate_input_offsets(inputs, size)
+            ports["out"] = {"pt": (x, y), "normal": (-1, 0)}
             for i, dy in enumerate(offsets):
-                ports[f"in{i}"] = (x + size, y + dy)
+                ports[f"in{i}"] = {"pt": (x + eff_size, y + dy), "normal": (1, 0)}
+        elif facing == "south":
+            ports["out"] = {"pt": (x, y), "normal": (0, 1)}
+            for i, dy in enumerate(offsets):
+                ports[f"in{i}"] = {"pt": (x - dy, y - eff_size), "normal": (0, -1)}
+        elif facing == "north":
+            ports["out"] = {"pt": (x, y), "normal": (0, -1)}
+            for i, dy in enumerate(offsets):
+                ports[f"in{i}"] = {"pt": (x - dy, y + eff_size), "normal": (0, 1)}
     elif comp_name == "D Flip-Flop":
-        ports["D"] = (x - 40, y - 20)
-        ports["CLK"] = (x - 40, y)
-        ports["Q"] = (x, y - 20)
-        ports["notQ"] = (x, y)
+        ports["d"] = {"pt": (x - 40, y), "normal": (-1, 0)}
+        ports["clock"] = {"pt": (x - 40, y + 20), "normal": (-1, 0)}
+        ports["q"] = {"pt": (x, y), "normal": (1, 0)}
+        ports["notq"] = {"pt": (x, y + 20), "normal": (1, 0)}
+        ports["reset"] = {"pt": (x - 10, y + 30), "normal": (0, 1)}
+        ports["preset"] = {"pt": (x - 30, y + 30), "normal": (0, 1)}
+        ports["enable"] = {"pt": (x - 20, y + 30), "normal": (0, 1)}
     elif comp_name == "T Flip-Flop":
-        ports["T"] = (x - 40, y - 20)
-        ports["CLK"] = (x - 40, y)
-        ports["Q"] = (x, y - 20)
-        ports["notQ"] = (x, y)
+        ports["t"] = {"pt": (x - 40, y), "normal": (-1, 0)}
+        ports["clock"] = {"pt": (x - 40, y + 20), "normal": (-1, 0)}
+        ports["q"] = {"pt": (x, y), "normal": (1, 0)}
+        ports["notq"] = {"pt": (x, y + 20), "normal": (1, 0)}
+        ports["reset"] = {"pt": (x - 10, y + 30), "normal": (0, 1)}
+        ports["preset"] = {"pt": (x - 30, y + 30), "normal": (0, 1)}
+        ports["enable"] = {"pt": (x - 20, y + 30), "normal": (0, 1)}
     elif comp_name == "J-K Flip-Flop":
-        ports["J"] = (x - 40, y - 20)
-        ports["CLK"] = (x - 40, y)
-        ports["K"] = (x - 40, y + 20)
-        ports["Q"] = (x, y - 20)
-        ports["notQ"] = (x, y)
+        ports["j"] = {"pt": (x - 40, y), "normal": (-1, 0)}
+        ports["clock"] = {"pt": (x - 40, y + 10), "normal": (-1, 0)}
+        ports["k"] = {"pt": (x - 40, y + 20), "normal": (-1, 0)}
+        ports["q"] = {"pt": (x, y), "normal": (1, 0)}
+        ports["notq"] = {"pt": (x, y + 20), "normal": (1, 0)}
+        ports["reset"] = {"pt": (x - 10, y + 30), "normal": (0, 1)}
+        ports["preset"] = {"pt": (x - 30, y + 30), "normal": (0, 1)}
+        ports["enable"] = {"pt": (x - 20, y + 30), "normal": (0, 1)}
+    elif comp_name == "S-R Flip-Flop":
+        ports["s"] = {"pt": (x - 40, y), "normal": (-1, 0)}
+        ports["clock"] = {"pt": (x - 40, y + 10), "normal": (-1, 0)}
+        ports["r"] = {"pt": (x - 40, y + 20), "normal": (-1, 0)}
+        ports["q"] = {"pt": (x, y), "normal": (1, 0)}
+        ports["notq"] = {"pt": (x, y + 20), "normal": (1, 0)}
+        ports["reset"] = {"pt": (x - 10, y + 30), "normal": (0, 1)}
+        ports["preset"] = {"pt": (x - 30, y + 30), "normal": (0, 1)}
+        ports["enable"] = {"pt": (x - 20, y + 30), "normal": (0, 1)}
+    elif comp_name == "Multiplexer":
+        sel_cnt = int(attrs.get("select", "1"))
+        in_cnt = 1 << sel_cnt
+        for i in range(in_cnt):
+            ports[f"in{i}"] = {"pt": (x - 30, y - 10 * (in_cnt - 1) + 20 * i), "normal": (-1, 0)}
+        ports["out"] = {"pt": (x, y), "normal": (1, 0)}
+        ports["sel"] = {"pt": (x - 20, y + 20), "normal": (0, 1)}
+        ports["enable"] = {"pt": (x - 10, y + 20), "normal": (0, 1)}
+    elif comp_name == "Demultiplexer":
+        sel_cnt = int(attrs.get("select", "1"))
+        out_cnt = 1 << sel_cnt
+        ports["in"] = {"pt": (x, y), "normal": (-1, 0)}
+        for i in range(out_cnt):
+            ports[f"out{i}"] = {"pt": (x + 30, y - 10 * (out_cnt - 1) + 20 * i), "normal": (1, 0)}
+        ports["sel"] = {"pt": (x + 20, y + 20), "normal": (0, 1)}
+        ports["enable"] = {"pt": (x + 10, y + 20), "normal": (0, 1)}
+    elif comp_name == "Decoder":
+        sel_cnt = int(attrs.get("select", "1"))
+        out_cnt = 1 << sel_cnt
+        ports["sel"] = {"pt": (x, y), "normal": (-1, 0)}
+        ports["enable"] = {"pt": (x - 10, y), "normal": (-1, 0)}
+        for i in range(out_cnt):
+            ports[f"out{i}"] = {"pt": (x + 10, y - 10 - 20 * (out_cnt - 1 - i)), "normal": (1, 0)}
     else:
-        # Fallback for generic component: assume anchor at loc is a port
-        ports["anchor"] = (x, y)
+        # Generic component fallback
+        ports["anchor"] = {"pt": (x, y), "normal": None}
 
     return ports
+
+
+def get_component_ports(comp_name: str, loc: Tuple[int, int], attrs: Dict[str, str]) -> Dict[str, Tuple[int, int]]:
+    """Calculates all port coordinates for a component based on type, loc, and attrs."""
+    info = get_component_port_info(comp_name, loc, attrs)
+    return {k: v["pt"] for k, v in info.items()}
 
 
 class CircuitInspectionReport:
@@ -132,6 +196,7 @@ class CircuitInspectionReport:
         self.gates: List[Dict[str, Any]] = []
         self.wire_count: int = 0
         self.dangling_endpoints: List[Tuple[int, int]] = []
+        self.tangential_violations: List[str] = []
         self.matrix_connections: Dict[str, List[str]] = defaultdict(list)
 
     @property
@@ -199,6 +264,7 @@ def inspect_circuit(filepath: str, strict: bool = True) -> CircuitInspectionRepo
     # Collect Components & Ports
     comps = circ.findall("comp")
     comp_ports: Dict[Tuple[int, int], List[Tuple[str, str]]] = defaultdict(list)
+    comp_ports_normals: Dict[Tuple[int, int], List[Tuple[str, str, Optional[Tuple[int, int]]]]] = defaultdict(list)
     gate_types = {
         "AND Gate", "OR Gate", "NOT Gate", "NAND Gate", "NOR Gate", "XOR Gate", "XNOR Gate",
         "D Flip-Flop", "T Flip-Flop", "J-K Flip-Flop", "S-R Flip-Flop", "Counter", "Register"
@@ -236,9 +302,11 @@ def inspect_circuit(filepath: str, strict: bool = True) -> CircuitInspectionRepo
                 report.inputs.append(pin_info)
 
         # Calculate all connection ports for this component
-        ports = get_component_ports(name, loc, attrs)
-        for port_name, port_pt in ports.items():
+        ports_info = get_component_port_info(name, loc, attrs)
+        for port_name, pmeta in ports_info.items():
+            port_pt = pmeta["pt"]
             comp_ports[port_pt].append((name, port_name))
+            comp_ports_normals[port_pt].append((name, port_name, pmeta["normal"]))
 
     # 3. Collect Wires & Graph
     wires = circ.findall("wire")
@@ -279,6 +347,28 @@ def inspect_circuit(filepath: str, strict: bool = True) -> CircuitInspectionRepo
         if deg == 1 and pt not in comp_ports:
             report.dangling_endpoints.append(pt)
             report.errors.append(f"Dangling wire endpoint at {pt}! Wire segment terminates in empty space.")
+
+    # 4.5 Port Perpendicularity Check (Zero Tangential / Grazing Port Connections)
+    # Every wire connecting to a component port MUST be strictly perpendicular (normal)
+    # to the component boundary, with at least 1-2 grid cells (10-20px) offset before turning.
+    for pt, p_list in comp_ports_normals.items():
+        if pt not in adj:
+            continue
+        for c_name, p_name, norm in p_list:
+            if norm is None:
+                continue
+            for neighbor in adj[pt]:
+                dx = neighbor[0] - pt[0]
+                dy = neighbor[1] - pt[1]
+                u = (1 if dx > 0 else (-1 if dx < 0 else 0), 1 if dy > 0 else (-1 if dy < 0 else 0))
+                if u != norm:
+                    msg = (
+                        f"Tangential/grazing wire at {c_name} port '{p_name}' at {pt}! "
+                        f"Wire segment to {neighbor} moves in direction {u}, but port requires perpendicular normal {norm}. "
+                        f"Wire must turn at least 1-2 grid cells (10-20px) away from component."
+                    )
+                    report.tangential_violations.append(msg)
+                    report.errors.append(msg)
 
     # 5. Connectivity Trace & Matrix
     # Map gates to the output pins they drive

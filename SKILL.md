@@ -122,6 +122,45 @@ Every generated `.circ` file **must** include the following blocks directly afte
   - Все координаты кратны 10px, сетка строгая, проводники строго ортогональны (Manhattan).
   - Схема функционально 100% работоспособна и верифицирована.
 
+### 3.8 Normal (Perpendicular) Port Entry & Exit Rule (Правило перпендикулярного входа и выхода проводов)
+- **The Core Problem (Касательный/скользящий ввод и вывод проводов):**
+  Connecting wires directly into component pins tangentially or along the edge of the component symbol looks broken, violates engineering schematic conventions, and fails automated inspection.
+  
+  ```text
+  [ЗАПРЕЩЕНО - Касательный выход (Image 1)]:      [ЗАПРЕЩЕНО - Касательный вход (Image 2)]:
+       |\                                                |  (провод падает сбоку в пин)
+       | >O                                              v
+       |/  |  <-- Вертикальный сброс прямо         +-----+-----+
+           |      с кончика инвертора без отступа! |  *  |     )
+           v      (0px горизонтального вылета)     |  *  | AND )
+                                                   |  *  |     )
+                                                   +-----+-----+
+
+  [ТРЕБУЕТСЯ - Нормальный ортогональный ввод/вывод с отступом (Image 3)]:
+       |\
+       | >O--------+  <-- Отступ мин. 1-2 клетки (10-20px) перед поворотом!
+       |/          |
+                   |
+                   +------->  <-- Поворот в сторону входа за 1-2 клетки
+                           |
+                     +-----v-----+
+                     |  *  |     )
+                     |  *  | AND )
+                     |  *  |     )
+                     +-----+-----+
+  ```
+
+- **Strict Geometric Invariants:**
+  1. **East-facing Gate Output:** Wire MUST travel horizontally to the right by at least 1-2 grid cells before any vertical turn:
+     $$(X_{out}, Y_{out}) \longrightarrow (X_{out} + \Delta X, Y_{out}), \quad \Delta X \ge 10\text{--}20\text{ px}$$
+     A vertical wire originating directly at $(X_{out}, Y_{out})$ is strictly forbidden.
+  2. **East-facing Gate Inputs:** Wire MUST approach horizontally from the left by at least 1-2 grid cells:
+     $$(X_{in} - \Delta X, Y_{in}) \longrightarrow (X_{in}, Y_{in}), \quad \Delta X \ge 10\text{--}20\text{ px}$$
+     Any vertical distribution bus or corner must sit at $X_{bus} \le X_{in} - 10\text{ px}$. A vertical wire terminating directly on $(X_{in}, Y_{in})$ is strictly forbidden.
+  3. **3-Segment Z-Routing (`hvh`):** When connecting two horizontal ports at different Y coordinates ($Y_1 \ne Y_2$), **never use 2-segment L-routing** (`hv` or `vh`), which creates a tangential vertical segment at one of the endpoints. Always use 3-segment routing:
+     $$(X_1, Y_1) \longrightarrow (X_{mid}, Y_1) \longrightarrow (X_{mid}, Y_2) \longrightarrow (X_2, Y_2)$$
+     where $X_1 < X_{mid} < X_2$. `Circuit.connect()` in `logisim_builder.py` automatically uses `hvh` routing by default.
+
 ---
 
 ## 4. Ground-Truth Component Pin Geometry
@@ -275,6 +314,11 @@ Flip-Flop bodies are 40x40. Outputs $Q$ and $\overline{Q}$ are on the right edge
 - **Symptom:** Schematics look unnatural, monotonous, or conflict with how students and teachers were taught to read them in standard textbooks and lab manuals.
 - **Strict Rule:** **Do not dogmatically hardcode pin or bus positions.** Structure the schematic so it mirrors the canonical diagram from authoritative engineering sources, while strictly preserving core quality invariants: zero dangling wire stubs, zero feedback loop collisions, clean 10px snapping, and unlabeled internal gates.
 
+### 6.6 Pitfall 6: Tangential / Grazing Port Connections (Ошибка касательного подключения к пинам)
+- **Problem:** Routing a wire that turns directly on the coordinate of a component pin (0px lead-in/lead-out), causing the wire to run tangentially along the side of the component or drop vertically right off the tip of an inverter.
+- **Symptom:** Inverters have wires hanging directly down from the inversion bubble; AND/OR gates have wires entering from the top or bottom edges into input pins. The schematic looks sloppy, violates electrical drawing standards, and fails automated inspection.
+- **Strict Rule:** Every pin connection MUST be strictly perpendicular (normal) to the component boundary. Provide a clean 10-20px lead-in or lead-out segment before any orthogonal turn. `Circuit.connect()` and `inspect_circ.py` automatically enforce this invariant.
+
 ---
 
 ## 7. Automated Circuit Inspection & Self-Check Tool (`inspect_circ.py`)
@@ -290,7 +334,8 @@ cmd.exe /c "python scripts/inspect_circ.py <path_to_circuit.circ>"
 2. **Strict Component Labeling:** Detects and flags any internal gates or flip-flops that have forbidden labels. Can auto-clean with `--fix-labels`.
 3. **Wire Snapping & Orthogonality:** Confirms all coordinates snap to 10px grid and zero diagonal wires exist.
 4. **Dangling Wire Detection:** Finds any wire endpoint that terminates in mid-air (degree 1 with no component port).
-5. **Electrical Connectivity & Truth Table Trace:** Traces signal propagation from every input to every gate and output pin, printing the complete logical truth table matrix to verify functionality against real-world engineering models.
+5. **Perpendicular Port Alignment:** Enforces that every wire enters and exits component ports perpendicularly along the port normal with at least 1-2 grid cells clearance (zero tangential/grazing connections).
+6. **Electrical Connectivity & Truth Table Trace:** Traces signal propagation from every input to every gate and output pin, printing the complete logical truth table matrix to verify functionality against real-world engineering models.
 
 ---
 
@@ -334,13 +379,14 @@ Before delivering any `.circ` file, verify:
 1. **Toolbar & Mappings Included:** Verify `<toolbar>` contains Poke Tool and Edit Tool.
 2. **All coordinates are multiples of 10.**
 3. **Every wire has either $X_1 = X_2$ or $Y_1 = Y_2$** (zero diagonal lines).
-4. **No wire passes through a gate center $Y = Y_g$** (prevents red feedback loop bug).
-5. **Multi-input gates have adequate vertical clearance:** $\Delta Y \ge \max(120, K \times 14) + 60$ px.
-6. **Strict Wire Termination:** Vertical buses terminate strictly at their lowest connected gate tap (zero hanging lines into void).
-7. **Component Labeling:** Only inputs and outputs are labeled. Internal gates and flip-flops have `label=""`.
-8. **No label collisions:** Top pin array pitch is $\Delta X \ge 40$ px; inputs face south (`labelloc="north"`).
-9. **No overlapping collinear wire runs:** Use `add_vbus` / `add_hbus` for bus taps.
-10. **Run automated circuit inspector & validator:**
+4. **Strict Perpendicular Port Connections:** Every wire enters and exits pins strictly perpendicular to the component edge with $\ge 10\text{--}20$ px clearance before turning (zero tangential / grazing connections).
+5. **No wire passes through a gate center $Y = Y_g$** (prevents red feedback loop bug).
+6. **Multi-input gates have adequate vertical clearance:** $\Delta Y \ge \max(120, K \times 14) + 60$ px.
+7. **Strict Wire Termination:** Vertical buses terminate strictly at their lowest connected gate tap (zero hanging lines into void).
+8. **Component Labeling:** Only inputs and outputs are labeled. Internal gates and flip-flops have `label=""`.
+9. **No label collisions:** Top pin array pitch is $\Delta X \ge 40$ px; inputs face south (`labelloc="north"`).
+10. **No overlapping collinear wire runs:** Use `add_vbus` / `add_hbus` for bus taps.
+11. **Run automated circuit inspector & validator:**
     ```bash
     cmd.exe /c "python scripts/inspect_circ.py <path_to_circuit.circ>"
     cmd.exe /c "python scripts/validate_circ.py <path_to_circuit.circ>"

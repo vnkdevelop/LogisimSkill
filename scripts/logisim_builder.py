@@ -559,6 +559,53 @@ def Text(x: int, y: int, text: str, font: str = "SansSerif plain 12", halign: st
 # Circuit and Project Container
 # ==============================================================================
 
+def get_component_port_normal(comp: Component, port_name: str) -> Optional[Tuple[int, int]]:
+    """Determines outward normal unit vector for a port on a component."""
+    facing = comp.attrs.get("facing", "east")
+    name = comp.name
+
+    if name == "Pin":
+        facing_map = {"east": (1, 0), "west": (-1, 0), "south": (0, 1), "north": (0, -1)}
+        return facing_map.get(facing, (1, 0))
+    elif name in ("Constant", "Clock"):
+        facing_map = {"east": (1, 0), "west": (-1, 0), "south": (0, 1), "north": (0, -1)}
+        return facing_map.get(facing, (1, 0))
+    elif name == "Power":
+        return (0, -1)
+    elif name == "Ground":
+        return (0, 1)
+    elif name == "Tunnel":
+        facing_map = {"east": (1, 0), "west": (-1, 0), "south": (0, 1), "north": (0, -1)}
+        return facing_map.get(facing, (-1, 0))
+    elif name in ("NOT Gate", "AND Gate", "OR Gate", "NAND Gate", "NOR Gate", "XOR Gate", "XNOR Gate"):
+        is_out = (port_name == "out")
+        if facing == "east":
+            return (1, 0) if is_out else (-1, 0)
+        elif facing == "west":
+            return (-1, 0) if is_out else (1, 0)
+        elif facing == "south":
+            return (0, 1) if is_out else (0, -1)
+        elif facing == "north":
+            return (0, -1) if is_out else (0, 1)
+    elif "Flip-Flop" in name:
+        if port_name in ("d", "t", "j", "k", "s", "r", "clock"):
+            return (-1, 0)
+        elif port_name in ("q", "notq"):
+            return (1, 0)
+        elif port_name in ("reset", "preset", "enable"):
+            return (0, 1)
+    elif name in ("Multiplexer", "Demultiplexer", "Decoder"):
+        if port_name in ("sel", "enable"):
+            return (0, 1)
+        if name == "Multiplexer":
+            return (1, 0) if port_name == "out" else (-1, 0)
+        elif name == "Demultiplexer":
+            return (-1, 0) if port_name == "in" else (1, 0)
+        elif name == "Decoder":
+            return (-1, 0) if port_name in ("sel", "enable") else (1, 0)
+    return None
+
+
 class Circuit:
     """Represents a single circuit sheet containing components and wires."""
     def __init__(self, name: str = "main"):
@@ -574,13 +621,16 @@ class Circuit:
         self,
         p1: Union[Coordinate, Tuple[int, int]],
         p2: Union[Coordinate, Tuple[int, int]],
-        routing: str = "hv"
+        routing: str = "auto"
     ) -> List[Wire]:
         """
         Adds orthogonal Manhattan wire segment(s) between p1 and p2.
         routing:
-          'hv' -> horizontal segment first (p1.x, p1.y -> p2.x, p1.y), then vertical to (p2.x, p2.y)
-          'vh' -> vertical segment first (p1.x, p1.y -> p1.x, p2.y), then horizontal to (p2.x, p2.y)
+          'auto' / 'hvh' -> 3-segment Z-routing (horizontal lead-out, vertical corridor, horizontal lead-in)
+                            ensures strict perpendicularity into both horizontal ports.
+          'vhv'          -> 3-segment vertical-horizontal-vertical routing.
+          'hv'           -> 2-segment L-routing (corner at p2.x, p1.y).
+          'vh'           -> 2-segment L-routing (corner at p1.x, p2.y).
         """
         c1 = p1 if isinstance(p1, Coordinate) else Coordinate(p1[0], p1[1])
         c2 = p2 if isinstance(p2, Coordinate) else Coordinate(p2[0], p2[1])
@@ -595,17 +645,54 @@ class Circuit:
             self.wires.add(w)
             added.append(w)
         else:
-            # Need 2 orthogonal segments via corner point
-            if routing == "hv":
+            if routing in ("auto", "hvh"):
+                xmid = ((c1.x + c2.x) // 2 // 10) * 10
+                if c2.x > c1.x:
+                    xmid = max(c1.x + 10, min(c2.x - 10, xmid))
+                elif c2.x < c1.x:
+                    xmid = min(c1.x - 10, max(c2.x + 10, xmid))
+                else:
+                    xmid = c1.x + 20
+                p_mid1 = Coordinate(xmid, c1.y)
+                p_mid2 = Coordinate(xmid, c2.y)
+                w1 = Wire(c1, p_mid1)
+                w2 = Wire(p_mid1, p_mid2)
+                w3 = Wire(p_mid2, c2)
+                self.wires.add(w1)
+                self.wires.add(w2)
+                self.wires.add(w3)
+                added.extend([w1, w2, w3])
+            elif routing == "vhv":
+                ymid = ((c1.y + c2.y) // 2 // 10) * 10
+                if c2.y > c1.y:
+                    ymid = max(c1.y + 10, min(c2.y - 10, ymid))
+                elif c2.y < c1.y:
+                    ymid = min(c1.y - 10, max(c2.y + 10, ymid))
+                else:
+                    ymid = c1.y + 20
+                p_mid1 = Coordinate(c1.x, ymid)
+                p_mid2 = Coordinate(c2.x, ymid)
+                w1 = Wire(c1, p_mid1)
+                w2 = Wire(p_mid1, p_mid2)
+                w3 = Wire(p_mid2, c2)
+                self.wires.add(w1)
+                self.wires.add(w2)
+                self.wires.add(w3)
+                added.extend([w1, w2, w3])
+            elif routing == "hv":
                 corner = Coordinate(c2.x, c1.y)
-            else:
+                w1 = Wire(c1, corner)
+                w2 = Wire(corner, c2)
+                self.wires.add(w1)
+                self.wires.add(w2)
+                added.extend([w1, w2])
+            else:  # vh
                 corner = Coordinate(c1.x, c2.y)
-
-            w1 = Wire(c1, corner)
-            w2 = Wire(corner, c2)
-            self.wires.add(w1)
-            self.wires.add(w2)
-            added.extend([w1, w2])
+                w1 = Wire(c1, corner)
+                w2 = Wire(corner, c2)
+                self.wires.add(w1)
+                self.wires.add(w2)
+                added.extend([w1, w2])
         return added
 
     def connect(
@@ -614,12 +701,31 @@ class Circuit:
         port1: str,
         comp2: Component,
         port2: str,
-        routing: str = "hv"
+        routing: str = "auto"
     ) -> List[Wire]:
-        """Connects port1 of comp1 to port2 of comp2 via orthogonal wires."""
+        """
+        Connects port1 of comp1 to port2 of comp2 via orthogonal wires,
+        automatically selecting 3-segment perpendicular routing to guarantee zero tangential connections.
+        """
         pt1 = comp1.get_port(port1)
         pt2 = comp2.get_port(port2)
-        return self.wire(pt1, pt2, routing=routing)
+
+        actual_routing = routing
+        if routing == "auto":
+            n1 = get_component_port_normal(comp1, port1)
+            n2 = get_component_port_normal(comp2, port2)
+            if n1 and n2 and n1[1] == 0 and n2[1] == 0:
+                actual_routing = "hvh"
+            elif n1 and n2 and n1[0] == 0 and n2[0] == 0:
+                actual_routing = "vhv"
+            elif n1 and n1[1] == 0 and n2 and n2[0] == 0:
+                actual_routing = "hv"
+            elif n1 and n1[0] == 0 and n2 and n2[1] == 0:
+                actual_routing = "vh"
+            else:
+                actual_routing = "hvh"
+
+        return self.wire(pt1, pt2, routing=actual_routing)
 
     def add_vbus(self, x: int, ys: List[int]) -> List[Wire]:
         """

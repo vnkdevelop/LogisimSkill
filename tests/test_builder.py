@@ -48,17 +48,17 @@ class TestLogisimBuilder(unittest.TestCase):
         pin_s = c.add(Pin(360, 110, label="Sum", facing="west", output=True))
         pin_c = c.add(Pin(360, 190, label="Carry", facing="west", output=True))
 
-        # Wires from Pin A to XOR in0 and AND in0
-        c.connect(pin_a, "pin", xor_gate, "in0", routing="hv")
-        c.connect(pin_a, "pin", and_gate, "in0", routing="hv")
+        # Wires from Pin A to XOR in0 and AND in0 (perpendicular auto-routing)
+        c.connect(pin_a, "pin", xor_gate, "in0")
+        c.connect(pin_a, "pin", and_gate, "in0")
 
-        # Wires from Pin B to XOR in1 and AND in1
-        c.connect(pin_b, "pin", xor_gate, "in1", routing="hv")
-        c.connect(pin_b, "pin", and_gate, "in1", routing="hv")
+        # Wires from Pin B to XOR in1 and AND in1 (perpendicular auto-routing)
+        c.connect(pin_b, "pin", xor_gate, "in1")
+        c.connect(pin_b, "pin", and_gate, "in1")
 
         # Outputs
-        c.connect(xor_gate, "out", pin_s, "pin", routing="hv")
-        c.connect(and_gate, "out", pin_c, "pin", routing="hv")
+        c.connect(xor_gate, "out", pin_s, "pin")
+        c.connect(and_gate, "out", pin_c, "pin")
 
         out_path = os.path.join(self.examples_dir, "half_adder.circ")
         proj.save(out_path)
@@ -67,54 +67,7 @@ class TestLogisimBuilder(unittest.TestCase):
     def test_decoder_2to4(self):
         """2-to-4 Decoder matching standard academic lab circuits."""
         proj = Project(name="main")
-        c = proj.main
-
-        # Inputs
-        a0 = c.add(Pin(100, 160, label="a0"))
-        a1 = c.add(Pin(100, 260, label="a1"))
-
-        # Inverters
-        not0 = c.add(NotGate(200, 180, size=30))
-        not1 = c.add(NotGate(200, 280, size=30))
-
-        # Connect a0 -> not0
-        c.connect(a0, "pin", not0, "in", routing="hv")
-        # Connect a1 -> not1
-        c.connect(a1, "pin", not1, "in", routing="hv")
-
-        # 4 AND gates (unlabeled)
-        and0 = c.add(AndGate(340, 100, inputs=2, size=50))
-        and1 = c.add(AndGate(340, 180, inputs=2, size=50))
-        and2 = c.add(AndGate(340, 260, inputs=2, size=50))
-        and3 = c.add(AndGate(340, 340, inputs=2, size=50))
-
-        # Outputs
-        y0 = c.add(Pin(420, 100, label="Y0=!a1!a0", facing="west", output=True))
-        y1 = c.add(Pin(420, 180, label="Y1=!a1 a0", facing="west", output=True))
-        y2 = c.add(Pin(420, 260, label="Y2= a1!a0", facing="west", output=True))
-        y3 = c.add(Pin(420, 340, label="Y3= a1 a0", facing="west", output=True))
-
-        c.connect(and0, "out", y0, "pin")
-        c.connect(and1, "out", y1, "pin")
-        c.connect(and2, "out", y2, "pin")
-        c.connect(and3, "out", y3, "pin")
-
-        # Routing to inputs
-        # Y0 = !a1 & !a0
-        c.connect(not0, "out", and0, "in0", routing="hv")
-        c.connect(not1, "out", and0, "in1", routing="hv")
-
-        # Y1 = !a1 & a0
-        c.connect(a0, "pin", and1, "in0", routing="hv")
-        c.connect(not1, "out", and1, "in1", routing="hv")
-
-        # Y2 = a1 & !a0
-        c.connect(not0, "out", and2, "in0", routing="hv")
-        c.connect(a1, "pin", and2, "in1", routing="hv")
-
-        # Y3 = a1 & a0
-        c.connect(a0, "pin", and3, "in0", routing="hv")
-        c.connect(a1, "pin", and3, "in1", routing="hv")
+        build_decoder_2to4(proj, name="main", with_enable=False)
 
         out_path = os.path.join(self.examples_dir, "decoder_2to4.circ")
         proj.save(out_path)
@@ -201,7 +154,16 @@ class TestLogisimBuilder(unittest.TestCase):
         rep = inspect_circuit(enc_path, strict=True)
         self.assertTrue(rep.passed, f"Encoder inspection failed: {rep.errors}")
         self.assertEqual(len(rep.dangling_endpoints), 0, "No dangling endpoints allowed")
+        self.assertEqual(len(rep.tangential_violations), 0, "No tangential wire connections allowed")
         self.assertEqual(len(rep.gates), 5, "Strictly 5 OR gates for 20-to-5 encoder")
+
+        # Also verify canonical_suite.circ, half_adder.circ, decoder_2to4.circ
+        for fname in ["canonical_suite.circ", "half_adder.circ", "decoder_2to4.circ", "d_flip_flop_divider.circ"]:
+            fpath = os.path.join(self.examples_dir, fname)
+            if os.path.exists(fpath):
+                r = inspect_circuit(fpath, strict=True)
+                self.assertTrue(r.passed, f"{fname} inspection failed: {r.errors}")
+                self.assertEqual(len(r.tangential_violations), 0, f"{fname} has tangential wire violations: {r.tangential_violations}")
 
 
 if __name__ == "__main__":
