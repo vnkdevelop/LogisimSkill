@@ -1023,7 +1023,7 @@ def build_matrix_encoder(
     name: str = "main",
     num_inputs: int = 8,
     title: str = "",
-    target_variant: Optional[int] = None,
+    highlight_input: Optional[int] = None,
     with_valid: bool = False
 ) -> Circuit:
     """
@@ -1069,8 +1069,8 @@ def build_matrix_encoder(
     for i in range(num_inputs):
         x_pos = x_start + i * x_pitch
         lbl = f"X{i}"
-        if target_variant is not None and i == target_variant:
-            lbl = f"X{i} ({target_variant})"
+        if highlight_input is not None and i == highlight_input:
+            lbl = f"X{i}*"
         c.add(Pin(x_pos, y_top, label=lbl, facing="south", labelloc="north"))
 
     x_gate = x_start + num_inputs * x_pitch + 80
@@ -1134,11 +1134,11 @@ def build_encoder_n_to_m(project: Project, name: str = "main", num_inputs: int =
 
 
 def build_encoder_8to3(project: Project, name: str = "Классический_8_в_3") -> Circuit:
-    return build_matrix_encoder(project, name=name, num_inputs=8, title="Классический шифратор 8 в 3", target_variant=7, with_valid=False)
+    return build_matrix_encoder(project, name=name, num_inputs=8, title="Классический шифратор 8 в 3", with_valid=False)
 
 
 def build_encoder_10to4_bcd(project: Project, name: str = "Шифратор_10_в_4_BCD") -> Circuit:
-    return build_matrix_encoder(project, name=name, num_inputs=10, title="Шифратор 10 в 4 BCD", target_variant=9, with_valid=False)
+    return build_matrix_encoder(project, name=name, num_inputs=10, title="Шифратор 10 в 4 BCD", with_valid=False)
 
 
 def build_multiplexer_4to1(project: Project, name: str = "main", with_enable: bool = True) -> Circuit:

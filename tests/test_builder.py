@@ -29,7 +29,12 @@ class TestLogisimBuilder(unittest.TestCase):
     def setUp(self):
         self.examples_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "examples"))
         os.makedirs(self.examples_dir, exist_ok=True)
-        self.logisim_jar = r"D:\ААС\logisim-win-2.7.1.exe"
+        self.logisim_jar = os.environ.get("LOGISIM_JAR", "")
+        if not self.logisim_jar:
+            for cand in [r"D:\ААС\logisim-win-2.7.1.exe", "logisim-win-2.7.1.exe", "logisim.jar"]:
+                if os.path.exists(cand):
+                    self.logisim_jar = cand
+                    break
 
     def test_coordinate_snapping(self):
         c1 = Coordinate(103, 198)
@@ -69,7 +74,7 @@ class TestLogisimBuilder(unittest.TestCase):
         self.assertTrue(validate_circ(out_path, self.logisim_jar if os.path.exists(self.logisim_jar) else None))
 
     def test_decoder_2to4(self):
-        """2-to-4 Decoder matching standard academic lab circuits."""
+        """2-to-4 Decoder matching canonical digital logic reference circuits."""
         proj = Project(name="main")
         build_decoder_2to4(proj, name="main", with_enable=False)
 
@@ -142,7 +147,7 @@ class TestLogisimBuilder(unittest.TestCase):
         build_encoder_8to3(proj, name="Классический_8_в_3")
         build_multiplexer_4to1(proj, name="Мультиплексор_4_в_1", with_enable=True)
         build_demultiplexer_1to4(proj, name="Демультиплексор_1_в_4", with_enable=True)
-        build_matrix_encoder(proj, name="Шифратор_20_в_5", num_inputs=20, target_variant=19, with_valid=False)
+        build_matrix_encoder(proj, name="Шифратор_16_в_4", num_inputs=16, with_valid=False)
 
         out_path = os.path.join(self.examples_dir, "canonical_suite.circ")
         proj.save(out_path)
@@ -151,15 +156,15 @@ class TestLogisimBuilder(unittest.TestCase):
     def test_circuit_inspection_strict_compliance(self):
         """Verifies that all generated circuits strictly pass inspect_circuit."""
         encoder_proj = Project(name="main")
-        build_matrix_encoder(encoder_proj, name="main", num_inputs=20, target_variant=19, with_valid=False)
-        enc_path = os.path.join(self.examples_dir, "matrix_encoder_20to5.circ")
+        build_matrix_encoder(encoder_proj, name="main", num_inputs=16, with_valid=False)
+        enc_path = os.path.join(self.examples_dir, "matrix_encoder_16to4.circ")
         encoder_proj.save(enc_path)
 
         rep = inspect_circuit(enc_path, strict=True)
         self.assertTrue(rep.passed, f"Encoder inspection failed: {rep.errors}")
         self.assertEqual(len(rep.dangling_endpoints), 0, "No dangling endpoints allowed")
         self.assertEqual(len(rep.tangential_violations), 0, "No tangential wire connections allowed")
-        self.assertEqual(len(rep.gates), 5, "Strictly 5 OR gates for 20-to-5 encoder")
+        self.assertEqual(len(rep.gates), 4, "Strictly 4 OR gates for 16-to-4 encoder")
 
         # Also verify canonical_suite.circ, half_adder.circ, decoder_2to4.circ
         for fname in ["canonical_suite.circ", "half_adder.circ", "decoder_2to4.circ", "d_flip_flop_divider.circ"]:
@@ -194,12 +199,12 @@ class TestLogisimBuilder(unittest.TestCase):
         self.assertTrue(validate_circ(out_path, self.logisim_jar if os.path.exists(self.logisim_jar) else None))
 
     def test_collision_and_overlap_detection(self):
-        """Verifies that inspect_circuit catches overlapping components (e.g. S4 and P4 pins)."""
+        """Verifies that inspect_circuit catches overlapping components (e.g. adjacent pins placed too close)."""
         proj = Project(name="main")
         c = proj.main
         # Two output pins with only 10px pitch (overlapping circle bodies as in user screenshot)
-        c.add(Pin(200, 100, label="S4", facing="west", output=True, labelloc="east"))
-        c.add(Pin(200, 110, label="P4", facing="west", output=True, labelloc="east"))
+        c.add(Pin(200, 100, label="OUT0", facing="west", output=True, labelloc="east"))
+        c.add(Pin(200, 110, label="OUT1", facing="west", output=True, labelloc="east"))
 
         tmp_path = os.path.join(self.examples_dir, "test_overlap.circ")
         try:

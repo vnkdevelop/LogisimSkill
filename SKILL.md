@@ -17,7 +17,7 @@ The agent operates as an autonomous, senior hardware and logic design engineer. 
 
 ```mermaid
 flowchart TD
-    Req["User Request & Specifications<br>(Variant, Images, Component Constraints)"] --> Analysis["Analysis & Sourcing<br>Determine Canonical Scheme & Truth Table"]
+    Req["User Request & Specifications<br>(Truth Table, Schematic Diagram, Component Constraints)"] --> Analysis["Analysis & Sourcing<br>Determine Canonical Scheme & Truth Table"]
     Analysis --> Strategy{"Component Strategy"}
     
     Strategy -->|"Built-in ICs"| Macro["Logisim Libraries (lib 2, 3, 4)<br>Ready-made D-FF, Adders, Plexers, Counters"]
@@ -114,9 +114,9 @@ Every generated `.circ` file **must** include the following blocks directly afte
 ### 3.3 Pin Pitch & Anti-Overlap Rules (Strict Geometric Spacing)
 In Logisim, a Pin symbol has a circle/square body with a diameter of 20 px (radius 10 px).
 - **Prohibition of Overlapping Pin Bodies:**
-  Placing adjacent pins with pitch $\Delta Y \le 10\text{ px}$ or $\Delta X \le 10\text{ px}$ causes their physical bodies and inner circles to intersect and overlap (the infamous $S_4 / P_4$ defect). Pitch $< 20\text{ px}$ is a fatal visual bug.
+  Placing adjacent pins with pitch $\Delta Y \le 10\text{ px}$ or $\Delta X \le 10\text{ px}$ causes their physical bodies and inner circles to intersect and overlap (visual collision defect). Pitch $< 20\text{ px}$ is a fatal visual bug.
 - **Vertical Pin Arrays:** Place pins vertically with a pitch of **$\Delta Y \ge 30\text{--}40$ px** (e.g., $Y = 100, 140, 180, 220 \dots$).
-- **Horizontal Pin Arrays:** Maintain a pitch of **$\Delta X \ge 40$ px** (e.g., $X = 120, 160, 200 \dots$) to prevent multi-character label collisions (e.g., `X18` and `X19` text colliding).
+- **Horizontal Pin Arrays:** Maintain a pitch of **$\Delta X \ge 40$ px** (e.g., $X = 120, 160, 200 \dots$) to prevent multi-character label collisions (e.g., adjacent multi-character labels colliding).
 - **Label Orientation:**
   - Left-hand inputs: `facing="east"`, `labelloc="west"`.
   - Right-hand outputs: `facing="west"`, `output="true"`, `labelloc="east"`.
@@ -139,7 +139,7 @@ In Logisim, a Pin symbol has a circle/square body with a diameter of 20 px (radi
 
 ### 3.6 Component Labeling Rules (Strict Academic Standards)
 - **Label Inputs and Outputs ONLY:**
-  - Pins representing inputs (`Pin` with `output="false"`, e.g. `A0`, `A1`, `E`, `DI`, `X0...X19`) and outputs (`Pin` with `output="true"`, e.g. `Y0...Y4`, `DO0...DO7`) **must** be clearly labeled according to the user's task or laboratory specifications.
+  - Pins representing inputs (`Pin` with `output="false"`, e.g. `A0..An`, `E`, `D0..Dn`, `CLK`, `RST`) and outputs (`Pin` with `output="true"`, e.g. `Y0..Ym`, `DO0..DOn`, `COUT`) **must** be clearly labeled according to the user's task or laboratory specifications.
 - **Never Label Internal Logic Gates or Flip-Flops:**
   - Standard logic gates (`AND Gate`, `OR Gate`, `NOT Gate`, `NAND Gate`, `NOR Gate`, `XOR Gate`, `XNOR Gate`) and sequential elements (`D Flip-Flop`, `T Flip-Flop`, `JK Flip-Flop`, `Counter`, `Register`) **MUST REMAIN UNLABELED** (`label=""`).
   - *Rationale:* In Logisim, component labels are drawn directly on top of the gate body or beside it. Labeling every internal gate (e.g. `AND_0`, `OR_Y1`, `NOT_1`) clutters the schematic, violates ГОСТ/academic electrical diagram conventions, and causes rejection.
@@ -381,7 +381,7 @@ main_c.connect(fa2, "Cout", fa3, "Cin")
   - Use nested staircase routing: outer gates turn at outer $X$ channels; inner gates turn at inner $X$ channels. Zero output lines may intersect or share coordinates.
 
 ### 7.8 Pitfall 8: Component Bounding Box Overlap & Insufficient Pin Pitch (Ошибка наложения корпусов компонентов и меток)
-- **Problem:** Placing adjacent pins with $\Delta Y = 10\text{ px}$ or $\Delta X = 10\text{ px}$. Since a Pin symbol has a 20 px diameter footprint, placing pins closer than 20 px causes their circle bodies and text labels to physically collide and merge into an unreadable blob (e.g. `S4` and `P4` overlapping as in adder sum and carry outputs).
+- **Problem:** Placing adjacent pins with $\Delta Y = 10\text{ px}$ or $\Delta X = 10\text{ px}$. Since a Pin symbol has a 20 px diameter footprint, placing pins closer than 20 px causes their circle bodies and text labels to physically collide and merge into an unreadable blob (e.g. two adjacent output pins placed with insufficient 10 px clearance).
 - **Strict Rule:**
   - **Vertical Pin Pitch:** $\Delta Y \ge 30\text{--}40\text{ px}$ (absolute minimum 20 px without labels; $\ge 30\text{ px}$ with labels).
   - **Horizontal Pin Pitch:** $\Delta X \ge 40\text{ px}$.
@@ -405,7 +405,7 @@ cmd.exe /c "python scripts/inspect_circ.py <path_to_circuit.circ>"
 5. **Perpendicular Port Alignment:** Enforces that every wire enters and exits component ports perpendicularly along the port normal with at least 1-2 grid cells clearance (zero tangential/grazing connections).
 6. **Electrical Short-Circuit Audit:** Detects multiple gate outputs shorted together on the same net (output contention), preventing accidental junction dots and false branching.
 7. **Component Visual Collision & AABB Overlap Audit:** Calculates 2D bounding boxes for every component on canvas and flags an immediate error if any two components overlap spatially ($ix > 0$ and $iy > 0$).
-8. **Labeled Pin Pitch & Clearance Audit:** Verifies adjacent pins maintain $\ge 30\text{--}40\text{ px}$ pitch, preventing overlapping circle bodies and colliding text labels (e.g., `S4`/`P4`).
+8. **Labeled Pin Pitch & Clearance Audit:** Verifies adjacent pins maintain $\ge 30\text{--}40\text{ px}$ pitch, preventing overlapping circle bodies and colliding text labels (e.g., colliding pin labels).
 9. **Wire-Through-Body Penetration Audit:** Detects wires cutting through the interior of gates or macro components without terminating at valid boundary ports.
 10. **Electrical Connectivity & Truth Table Trace:** Traces signal propagation from every input to every gate and output pin, printing the complete logical truth table matrix to verify functionality.
 
