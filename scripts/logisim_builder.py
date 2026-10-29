@@ -1743,7 +1743,7 @@ def build_d_flip_flop_divider(project: Project, name: str = "main") -> Circuit:
     return c
 
 
-def build_shift_register_4bit(project: Project, name: str = "main") -> Circuit:
+def build_shift_register_4bit(project: Project, name: str = "main", direction: str = "left") -> Circuit:
     """
     Builds a 4-bit Serial-In Parallel-Out (SIPO) Shift Register using D Flip-Flops.
     """
@@ -1754,10 +1754,12 @@ def build_shift_register_4bit(project: Project, name: str = "main") -> Circuit:
 
     ff_xs = [200, 320, 440, 560]
     ffs = []
+    is_left = (direction.lower() == "left")
     for i, x in enumerate(ff_xs):
         ff = c.add(DFlipFlop(x, 140))
         ffs.append(ff)
-        q_pin = c.add(Pin(x + 50, 90, label=f"Q{i}", facing="south", output=True, labelloc="north"))
+        lbl = f"Q{i}" if is_left else f"Q{3 - i}"
+        q_pin = c.add(Pin(x + 50, 90, label=lbl, facing="south", output=True, labelloc="north"))
         c.wire((x, 140), (x + 50, 140))
         c.wire((x + 50, 140), (x + 50, 90))
 

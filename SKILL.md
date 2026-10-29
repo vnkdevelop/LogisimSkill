@@ -17,7 +17,7 @@ The agent operates as an autonomous, senior hardware and logic design engineer. 
 
 ```mermaid
 flowchart TD
-    Req["User Request & Specifications<br>(Truth Table, Schematic Diagram, Component Constraints)"] --> Analysis["Analysis & Sourcing<br>Determine Canonical Scheme & Truth Table"]
+    Req["User Request<br>(Free-form Prompt, PDF Task, Schematic, or Formula)"] --> Analysis["Analysis & Sourcing<br>Determine Canonical Scheme & Truth Table"]
     Analysis --> Strategy{"Component Strategy"}
     
     Strategy -->|"Built-in ICs"| Macro["Logisim Libraries (lib 2, 3, 4)<br>Ready-made D-FF, Adders, Plexers, Counters"]
@@ -50,6 +50,17 @@ flowchart TD
    - If the user specifies: *"use built-in D-flip-flop"* $\implies$ use `lib="4" name="D Flip-Flop"`.
    - If the user specifies: *"assemble D-flip-flop from discrete logic gates"* $\implies$ build it from discrete NAND/NOR gates.
    - If the user provides a reference screenshot or wiring diagram $\implies$ recreate that exact layout and pin arrangement.
+
+5. **Autonomous Handling of Free-Form & Zero-Context Prompts (Краткие запросы без методичек):**
+   - The user often provides minimal prompts with no files or tables (e.g. *"построй схему сдвига регистра влево"*, *"сделай 4-битный сумматор"*, *"собери счетчик по модулю 6"*, *"построй RS-триггер"*).
+   - **Do NOT stall, ask unnecessary questions, or demand PDFs.** Act as an expert senior hardware engineer and apply canonical digital design defaults:
+     - **Bit width:** Default to 4-bit (standard pedagogical size for registers, counters, adders, ALUs) unless specified.
+     - **Directional conventions (Shift Registers):**
+       - *Shift Left (Сдвиг влево):* Data enters LSB and propagates towards MSB ($D_{in} \to D_0, Q_0 \to D_1, Q_1 \to D_2, Q_2 \to D_3, Q_3 \to D_{out}$).
+       - *Shift Right (Сдвиг вправо):* Data enters MSB and propagates towards LSB ($D_{in} \to D_3, Q_3 \to D_2, Q_2 \to D_1, Q_1 \to D_0, Q_0 \to D_{out}$).
+     - **Clocking:** Common shared Clock bus (`CLK`, `Clock` component), active rising edge.
+     - **Component baseline:** Use built-in standard library components (`D Flip-Flop` from lib 4, standard `AND`/`OR` gates) for high-level requests; use discrete gate cross-coupling for fundamental latch/flip-flop synthesis.
+   - Synthesize the circuit immediately, verify it with `inspect_circ.py`, and deliver the working schematic with brief instructions on how to clock and test it in Logisim.
 
 ---
 
