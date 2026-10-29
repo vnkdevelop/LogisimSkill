@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.class
+*.jar
+*.exe
+*.pdf
+*.log
+*.tmp
+.DS_Store
+.vscode/
+.idea/

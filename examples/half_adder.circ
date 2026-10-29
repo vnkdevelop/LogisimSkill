@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project source="2.7.1" version="1.0">
+  <lib desc="#Wiring" name="0"/>
+  <lib desc="#Gates" name="1"/>
+  <lib desc="#Plexers" name="2"/>
+  <lib desc="#Arithmetic" name="3"/>
+  <lib desc="#Memory" name="4"/>
+  <lib desc="#I/O" name="5"/>
+  <lib desc="#Base" name="6"/>
+  <main name="main"/>
+  <options>
+    <a name="gateUndefined" val="ignore"/>
+    <a name="simlimit" val="1000"/>
+    <a name="simrand" val="0"/>
+  </options>
+  <circuit name="main">
+    <a name="circuit" val="main"/>
+    <a name="clabel" val=""/>
+    <a name="clabelup" val="east"/>
+    <a name="clabelfont" val="SansSerif plain 12"/>
+    <wire from="(80,100)" to="(200,100)"/>
+    <wire from="(80,100)" to="(210,100)"/>
+    <wire from="(80,140)" to="(200,140)"/>
+    <wire from="(80,140)" to="(210,140)"/>
+    <wire from="(200,90)" to="(200,100)"/>
+    <wire from="(200,130)" to="(200,140)"/>
+    <wire from="(210,100)" to="(210,170)"/>
+    <wire from="(210,140)" to="(210,210)"/>
+    <wire from="(260,110)" to="(360,110)"/>
+    <wire from="(260,190)" to="(360,190)"/>
+    <comp lib="0" loc="(80,100)" name="Pin">
+      <a name="facing" val="east"/>
+      <a name="tristate" val="false"/>
+      <a name="label" val="A"/>
+      <a name="labelloc" val="west"/>
+    </comp>
+    <comp lib="0" loc="(80,140)" name="Pin">
+      <a name="facing" val="east"/>
+      <a name="tristate" val="false"/>
+      <a name="label" val="B"/>
+      <a name="labelloc" val="west"/>
+    </comp>
+    <comp lib="1" loc="(260,110)" name="XOR Gate">
+      <a name="size" val="50"/>
+      <a name="inputs" val="2"/>
+      <a name="label" val="XOR"/>
+    </comp>
+    <comp lib="1" loc="(260,190)" name="AND Gate">
+      <a name="size" val="50"/>
+      <a name="inputs" val="2"/>
+      <a name="label" val="AND"/>
+    </comp>
+    <comp lib="0" loc="(360,110)" name="Pin">
+      <a name="facing" val="west"/>
+      <a name="tristate" val="false"/>
+      <a name="label" val="Sum"/>
+      <a name="labelloc" val="east"/>
+      <a name="output" val="true"/>
+    </comp>
+    <comp lib="0" loc="(360,190)" name="Pin">
+      <a name="facing" val="west"/>
+      <a name="tristate" val="false"/>
+      <a name="label" val="Carry"/>
+      <a name="labelloc" val="east"/>
+      <a name="output" val="true"/>
+    </comp>
+  </circuit>
+</project>

@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project source="2.7.1" version="1.0">
+  <lib desc="#Wiring" name="0"/>
+  <lib desc="#Gates" name="1"/>
+  <lib desc="#Plexers" name="2"/>
+  <lib desc="#Arithmetic" name="3"/>
+  <lib desc="#Memory" name="4"/>
+  <lib desc="#I/O" name="5"/>
+  <lib desc="#Base" name="6"/>
+  <main name="main"/>
+  <options>
+    <a name="gateUndefined" val="ignore"/>
+    <a name="simlimit" val="1000"/>
+    <a name="simrand" val="0"/>
+  </options>
+  <circuit name="main">
+    <a name="circuit" val="main"/>
+    <a name="clabel" val=""/>
+    <a name="clabelup" val="east"/>
+    <a name="clabelfont" val="SansSerif plain 12"/>
+    <wire from="(100,180)" to="(220,180)"/>
+    <wire from="(180,160)" to="(180,220)"/>
+    <wire from="(180,160)" to="(220,160)"/>
+    <wire from="(180,220)" to="(280,220)"/>
+    <wire from="(260,160)" to="(360,160)"/>
+    <wire from="(260,180)" to="(280,180)"/>
+    <wire from="(260,180)" to="(360,180)"/>
+    <wire from="(280,180)" to="(280,220)"/>
+    <comp lib="0" loc="(100,180)" name="Pin">
+      <a name="facing" val="east"/>
+      <a name="tristate" val="false"/>
+      <a name="label" val="CLK"/>
+      <a name="labelloc" val="west"/>
+    </comp>
+    <comp lib="4" loc="(260,160)" name="D Flip-Flop">
+      <a name="trigger" val="rising"/>
+      <a name="label" val="DFF"/>
+    </comp>
+    <comp lib="0" loc="(360,160)" name="Pin">
+      <a name="facing" val="west"/>
+      <a name="tristate" val="false"/>
+      <a name="label" val="Q"/>
+      <a name="labelloc" val="east"/>
+      <a name="output" val="true"/>
+    </comp>
+    <comp lib="0" loc="(360,180)" name="Pin">
+      <a name="facing" val="west"/>
+      <a name="tristate" val="false"/>
+      <a name="label" val="!Q"/>
+      <a name="labelloc" val="east"/>
+      <a name="output" val="true"/>
+    </comp>
+  </circuit>
+</project>
