@@ -15,7 +15,7 @@ from logisim_builder import (
     Project, Pin, AndGate, OrGate, NotGate, XorGate, DFlipFlop,
     Coordinate, Wire,
     build_decoder_2to4, build_encoder_8to3, build_encoder_10to4_bcd,
-    build_multiplexer_4to1, build_demultiplexer_1to4
+    build_matrix_encoder, build_multiplexer_4to1, build_demultiplexer_1to4
 )
 from validate_circ import validate_circ
 
@@ -184,6 +184,7 @@ class TestLogisimBuilder(unittest.TestCase):
         build_encoder_8to3(proj, name="Классический_8_в_3")
         build_multiplexer_4to1(proj, name="Мультиплексор_4_в_1", with_enable=True)
         build_demultiplexer_1to4(proj, name="Демультиплексор_1_в_4", with_enable=True)
+        build_matrix_encoder(proj, name="Шифратор_20_в_5", num_inputs=20, target_variant=19, with_valid=True)
 
         out_path = os.path.join(self.examples_dir, "canonical_suite.circ")
         proj.save(out_path)

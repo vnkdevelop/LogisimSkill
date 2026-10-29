@@ -675,6 +675,8 @@ class Circuit:
 
         # Sorted wires for deterministic XML output
         for w in sorted(self.wires, key=lambda wire: (wire.p1.x, wire.p1.y, wire.p2.x, wire.p2.y)):
+            if w.is_zero_length():
+                continue
             elem.append(w.to_xml())
 
         for c in self.components:
@@ -902,62 +904,126 @@ def build_decoder_2to4(project: Project, name: str = "main", with_enable: bool =
     return c
 
 
-def build_encoder_n_to_m(project: Project, name: str = "main", num_inputs: int = 8) -> Circuit:
+def build_matrix_encoder(
+    project: Project,
+    name: str = "main",
+    num_inputs: int = 8,
+    title: str = "",
+    target_variant: Optional[int] = None,
+    with_valid: bool = True
+) -> Circuit:
     """
-    Builds an N-to-M priority/binary encoder on OR gates.
-    M = ceil(log2(num_inputs)).
-    Inputs X0...X_{N-1} placed vertically on the left with 30px pitch to prevent label collisions.
-    Input Xi connects to OR gate Yk if the k-th bit of i is 1 ((i >> k) & 1 == 1).
+    Builds a canonical Matrix Encoder (топология 'Иксы сверху').
+    - Inputs X0...X_{N-1} placed along the top horizontal line at Y=80 (facing="south", labelloc="north").
+    - Ample pitch dx=40px completely eliminates label collisions.
+    - Full vertical bus lines run for ALL inputs (including X0!) down to the bottom of the matrix.
+    - OR gates are placed on the right, generously spaced vertically so gate bodies never collide.
+    - Row Y = Y_gate is strictly reserved for the output wire, preventing the red feedback loop bug.
+    - Optional Activity/Validation output V (Any active) connects X0...X_{N-1}.
     """
     import math
     c = project.get_or_create_circuit(name)
 
-    num_outputs = max(1, math.ceil(math.log2(num_inputs)))
-    x_in_pins = 80
-    y_start_in = 100
-    pitch = 30
+    if title:
+        c.add(Text(500, 30, title, font="SansSerif bold 14"))
 
+    x_start = 120
+    x_pitch = 40
+    y_top = 80
+
+    num_bits = max(1, math.ceil(math.log2(num_inputs)))
+
+    # Determine vertical gate placement with generous pitch (>= 120-160px)
+    gate_configs = []
+    y_gate_curr = 150
+    for bit in reversed(range(num_bits)):
+        sources = [i for i in range(1, num_inputs) if ((i >> bit) & 1) == 1]
+        weight = 1 << bit
+        label = f"Y{bit} ({weight})"
+        k_in = len(sources)
+        y_span = max(60, k_in * 14)
+        gate_configs.append((bit, label, y_gate_curr, sources, k_in))
+        y_gate_curr += y_span + 60
+
+    valid_config = None
+    if with_valid:
+        sources_all = list(range(num_inputs))
+        valid_config = ("V", "V (Активность)", y_gate_curr, sources_all, num_inputs)
+        y_bottom = y_gate_curr + max(60, num_inputs * 6) + 40
+    else:
+        y_bottom = y_gate_curr + 40
+
+    # Place top input pins
     input_pins = []
     for i in range(num_inputs):
-        y_pos = y_start_in + i * pitch
-        p = c.add(Pin(x_in_pins, y_pos, label=f"X{i}", labelloc="west"))
+        x_pos = x_start + i * x_pitch
+        lbl = f"X{i}"
+        if target_variant is not None and i == target_variant:
+            lbl = f"X{i} ({target_variant})"
+        p = c.add(Pin(x_pos, y_top, label=lbl, facing="south", labelloc="north"))
         input_pins.append(p)
 
-    x_gate = 420
-    x_out_pin = 500
-    y_gate_start = 140
-    y_gate_step = 100
+    x_gate = x_start + num_inputs * x_pitch + 80
+    x_in_port = x_gate - 50
+    x_out_pin = x_gate + 60
 
-    for k in range(num_outputs):
-        sources = [i for i in range(1, num_inputs) if ((i >> k) & 1) == 1]
-        y_gate = y_gate_start + k * y_gate_step
+    input_taps: Dict[int, List[int]] = {i: [y_top, y_bottom] for i in range(num_inputs)}
 
-        if len(sources) == 0:
-            gnd = c.add(Ground(x_gate, y_gate))
-            yp = c.add(Pin(x_out_pin, y_gate, label=f"Y{k} ({1<<k})", facing="west", output=True, labelloc="east"))
+    # Place binary output OR gates
+    for bit, label, y_g, sources, k_in in gate_configs:
+        if k_in == 0:
+            gnd = c.add(Ground(x_gate, y_g))
+            yp = c.add(Pin(x_out_pin, y_g, label=label, facing="west", output=True, labelloc="east"))
             c.connect(gnd, "out", yp, "pin")
-        elif len(sources) == 1:
+        elif k_in == 1:
             src_idx = sources[0]
-            yp = c.add(Pin(x_out_pin, y_gate, label=f"Y{k} ({1<<k})", facing="west", output=True, labelloc="east"))
-            c.connect(input_pins[src_idx], "pin", yp, "pin", routing="hv")
+            yp = c.add(Pin(x_out_pin, y_g, label=label, facing="west", output=True, labelloc="east"))
+            input_taps[src_idx].append(y_g)
+            c.wire((x_start + src_idx * x_pitch, y_g), (x_out_pin, y_g))
         else:
-            gate_inputs = len(sources)
-            or_gate = c.add(OrGate(x_gate, y_gate, inputs=gate_inputs, size=50, label=f"OR_Y{k}"))
-            yp = c.add(Pin(x_out_pin, y_gate, label=f"Y{k} ({1<<k})", facing="west", output=True, labelloc="east"))
-            c.connect(or_gate, "out", yp, "pin")
+            g = c.add(OrGate(x_gate, y_g, inputs=k_in, size=50, label=f"OR_Y{bit}"))
+            out_pin = c.add(Pin(x_out_pin, y_g, label=label, facing="west", output=True, labelloc="east"))
+            c.connect(g, "out", out_pin, "pin")
 
             for port_idx, src_idx in enumerate(sources):
-                c.connect(input_pins[src_idx], "pin", or_gate, f"in{port_idx}", routing="hv")
+                port_coord = g.get_port(f"in{port_idx}")
+                y_tap = port_coord.y
+                x_src = x_start + src_idx * x_pitch
+                input_taps[src_idx].append(y_tap)
+                c.wire((x_src, y_tap), (x_in_port, y_tap))
+
+    # Place Valid / Activity gate if requested
+    if valid_config:
+        bit, label, y_g, sources, k_in = valid_config
+        g = c.add(OrGate(x_gate, y_g, inputs=k_in, size=50, label="OR_V"))
+        out_pin = c.add(Pin(x_out_pin, y_g, label=label, facing="west", output=True, labelloc="east"))
+        c.connect(g, "out", out_pin, "pin")
+
+        for port_idx, src_idx in enumerate(sources):
+            port_coord = g.get_port(f"in{port_idx}")
+            y_tap = port_coord.y
+            x_src = x_start + src_idx * x_pitch
+            input_taps[src_idx].append(y_tap)
+            c.wire((x_src, y_tap), (x_in_port, y_tap))
+
+    # Draw full-length segmented vertical bus lines for ALL inputs (including X0!)
+    for i in range(num_inputs):
+        x_pos = x_start + i * x_pitch
+        c.add_vbus(x_pos, input_taps[i])
 
     return c
 
 
+def build_encoder_n_to_m(project: Project, name: str = "main", num_inputs: int = 8) -> Circuit:
+    return build_matrix_encoder(project, name=name, num_inputs=num_inputs, with_valid=True)
+
+
 def build_encoder_8to3(project: Project, name: str = "Классический_8_в_3") -> Circuit:
-    return build_encoder_n_to_m(project, name=name, num_inputs=8)
+    return build_matrix_encoder(project, name=name, num_inputs=8, title="Классический шифратор 8 в 3", target_variant=7, with_valid=True)
 
 
 def build_encoder_10to4_bcd(project: Project, name: str = "Шифратор_10_в_4_BCD") -> Circuit:
-    return build_encoder_n_to_m(project, name=name, num_inputs=10)
+    return build_matrix_encoder(project, name=name, num_inputs=10, title="Шифратор 10 в 4 BCD", target_variant=9, with_valid=True)
 
 
 def build_multiplexer_4to1(project: Project, name: str = "main", with_enable: bool = True) -> Circuit:

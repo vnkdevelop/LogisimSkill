@@ -172,10 +172,17 @@ Flip-Flop bodies are 40x40. Outputs $Q$ and $\overline{Q}$ are on the right edge
   - Vertical distribution buses for $E$ ($X=100$), $A_0$ ($X=120$), $A_1$ ($X=140$), $\overline{A_0}$ ($X=220$), $\overline{A_1}$ ($X=240$).
   - Direct builder: `build_decoder_2to4(proj, name="main", with_enable=True)`.
 
-### 5.2 Шифратор (Binary & Positional Encoders)
+### 5.2 Шифратор (Binary & Positional Matrix Encoders)
+- **Top-to-Bottom Matrix Topology («Иксы сверху»):**
+  - Standard digital and academic schematics place inputs $X_0 \dots X_{N-1}$ horizontally along the top ($Y=80$) facing south (`facing="south"`, `labelloc="north"`).
+  - Horizontal spacing between pins MUST be $\Delta X = 40$ px (e.g., $X = 120 + i \times 40$). This completely eliminates text label collision.
+  - From each pin $X_i$, a full vertical bus runs straight down to $Y_{bottom}$.
+  - **The $X_0$ Full-Length Bus Rule:** The bus for $X_0$ is **NEVER** cut off into a 10-20px stub. It runs the entire height of the matrix alongside $X_1 \dots X_{N-1}$ down to $Y_{bottom}$.
 - **General $N$-to-$M$ Positional Logic on OR Gates:**
   For $N$ inputs $X_0 \dots X_{N-1}$ and $M = \lceil\log_2 N\rceil$ output bits $Y_0 \dots Y_{M-1}$:
   $$\text{Input } X_i \text{ connects to OR gate } Y_k \iff ((i \gg k) \ \& \ 1) == 1$$
+- **Real-World Activity / Validation Output ($V$ / $A$ / $GS$):**
+  In real encoder ICs (e.g. 74148, К555ИВ1), input $X_0$ encodes $00000_2$. To distinguish between $X_0$ being pressed vs no inputs being pressed, an Activity gate $V$ ($V = X_0 \lor X_1 \lor \dots \lor X_{N-1}$) is placed at the bottom, connecting $X_0$ actively into the circuit.
 - **8-to-3 Octal Encoder:**
   - $Y_0 = X_1 + X_3 + X_5 + X_7$ (4-input OR)
   - $Y_1 = X_2 + X_3 + X_6 + X_7$ (4-input OR)
@@ -187,8 +194,8 @@ Flip-Flop bodies are 40x40. Outputs $Q$ and $\overline{Q}$ are on the right edge
   - $Y_2 = X_4 + X_5 + X_6 + X_7$ (4-input OR)
   - $Y_3 = X_8 + X_9$ (2-input OR)
   - Direct builder: `build_encoder_10to4_bcd(proj, name="Шифратор_10_в_4_BCD")`.
-- **Variant Encoders (e.g. 19-to-5):**
-  - Use `build_encoder_n_to_m(proj, name="main", num_inputs=19)` which automatically formats inputs vertically with 30px pitch and places 5 OR gates.
+- **Variant Encoders (e.g. 20-to-5 for number 19):**
+  - Use `build_matrix_encoder(proj, name="main", num_inputs=20, target_variant=19, with_valid=True)`.
 
 ### 5.3 Мультиплексор (Multiplexer 4-to-1 & 8-to-1)
 - **4-to-1 Logic:**
@@ -208,38 +215,59 @@ Flip-Flop bodies are 40x40. Outputs $Q$ and $\overline{Q}$ are on the right edge
 
 ---
 
-## 6. Python API & Instant Code Recipes
+## 6. Critical Engineering Pitfalls & Post-Mortem (Архитектурные ошибки и антипаттерны)
 
-### Recipe: Programmatic Generation with Segmented Buses & Toolbar
+### 6.1 Pitfall 1: Multi-Input Gate Body Expansion (Ловушка расширения высоты многовходовых вентилей)
+- **Problem:** When an OR or AND gate has $> 5$ inputs (e.g. 8, 10, or 20 inputs), Logisim's `AbstractGate` dynamically expands the vertical height of the component according to:
+  $$\text{Height} = \max(10 \times \text{inputs},\ \text{size})$$
+  A 10-input gate expands to 110 px in height ($Y_g \pm 50$), and a 20-input gate expands to 210 px in height ($Y_g \pm 100$).
+- **Symptom:** Placing adjacent gates with standard pitch ($< 120\text{--}160$ px) causes the gate bodies to visually overlap, their input pins to collide, and accidental short-circuits to form.
+- **Strict Rule:** Allocate a minimum vertical pitch between multi-input gate centers:
+  $$\Delta Y_{pitch} \ge \max(120,\ K_{inputs} \times 14) + 60\text{ px}$$
+  Always maintain at least 40-60 px of clean canvas margin between the outermost input pins of adjacent gates.
+
+### 6.2 Pitfall 2: Routing Horizontal Wires Through Gate Center (Ошибка короткого замыкания и красной петли)
+- **Problem:** For an East-facing gate at $(X_g, Y_g)$, its **OUTPUT PIN** is located exactly at $(X_g, Y_g)$. For an even number of inputs (2, 4, 8, 10 inputs), input pins are distributed symmetrically at $dy = \pm 10, \pm 20 \dots$, meaning **NO INPUT PORT EXISTS AT $dy = 0$**.
+- **Symptom:** If an input tap or pass-through wire is routed along $Y = Y_g$, it penetrates into the gate body and touches the output pin $(X_g, Y_g)$, shorting the gate's output back into its own inputs. In Logisim, this produces an oscillating feedback loop that turns the wire **bright red** with an unconnected blue `X` on the output pin.
+- **Strict Rule:** **The horizontal coordinate $Y = Y_g$ is strictly reserved for the output wire to the right.** Never route an input wire, bus tap, or signal through $Y = Y_g$.
+
+### 6.3 Pitfall 3: The Amputated $X_0$ Stub Pitfall (Ошибка «обрубка» шины $X_0$)
+- **Problem:** In binary encoders, input $X_0$ corresponds to code $00000_2$. Because none of the bits in $00000_2$ are 1, $X_0$ does not connect to any binary output OR gates ($Y_0 \dots Y_4$). If an agent draws wires only to active bits, $X_0$ ends up with a 10-20 px stub hanging in empty space.
+- **Symptom:** The user/instructor sees a broken, cut-off wire ("X0 обрезан") and assumes the schematic is broken.
+- **Strict Rule:** In matrix encoders, the vertical bus line for $X_0$ must run down the **full length of the matrix to the exact same $Y_{bottom}$ as all other inputs ($X_1 \dots X_n$)**. In addition, to make $X_0$ actively functional as in real-world ICs (74148, К555ИВ1), connect $X_0$ to an Activity/Validation gate $V$ ($V = X_0 \lor X_1 \lor \dots \lor X_n$) or zero indicator.
+
+### 6.4 Pitfall 4: Top-to-Bottom Matrix Layout vs Crowded Arrays (Топология «Иксы сверху»)
+- **Problem:** Arranging 20 input pins horizontally with $\le 20$ px pitch causes severe label collisions (e.g. `X18` and `X19` overlapping into an unreadable blob).
+- **Strict Rule:** When placing pins along the top, use **$\Delta X = 40$ px pitch**, set `facing="south"`, and set `labelloc="north"`. This gives each pin 40 px of clean horizontal space, keeping all labels perfectly legible.
+
+---
+
+## 7. Python API & Instant Code Recipes
+
+### Recipe: Programmatic Matrix Encoder Generation
 ```python
 from scripts.logisim_builder import (
-    Project, Pin, AndGate, OrGate, NotGate,
-    build_decoder_2to4, build_encoder_8to3,
+    Project, build_matrix_encoder, build_decoder_2to4,
     build_multiplexer_4to1, build_demultiplexer_1to4
 )
 
 # 1. Initialize project
 proj = Project(name="main")
 
-# 2. Add canonical circuits instantly
-build_decoder_2to4(proj, name="main", with_enable=True)
-build_encoder_8to3(proj, name="Классический_8_в_3")
+# 2. Add canonical matrix encoder (inputs along top, full X0 bus, no red loops)
+build_matrix_encoder(
+    proj,
+    name="main",
+    num_inputs=20,
+    title="Матричный шифратор 20 в 5: число 19 (10011_2)",
+    target_variant=19,
+    with_valid=True
+)
+
+# 3. Add other standard laboratory blocks
+build_decoder_2to4(proj, name="Дешифратор_2_в_4", with_enable=True)
 build_multiplexer_4to1(proj, name="Мультиплексор_4_в_1", with_enable=True)
-
-# 3. Custom circuit with segmented buses
-c = proj.get_or_create_circuit("CustomBusLogic")
-p1 = c.add(Pin(80, 100, label="IN0"))
-p2 = c.add(Pin(80, 160, label="IN1"))
-g = c.add(AndGate(300, 130, inputs=2, size=50))
-out = c.add(Pin(380, 130, label="OUT", facing="west", output=True))
-
-# Connect via segmented vertical bus
-c.wire(p1.get_port("pin"), (140, 100))
-c.wire(p2.get_port("pin"), (140, 160))
-c.add_vbus(140, [100, 110, 150, 160]) # Segmented between taps
-c.wire((140, 110), g.get_port("in0"))
-c.wire((140, 150), g.get_port("in1"))
-c.connect(g, "out", out, "pin")
+build_demultiplexer_1to4(proj, name="Демультиплексор_1_в_4", with_enable=True)
 
 # 4. Save (automatically writes full <mappings> and <toolbar>)
 proj.save("lab_circuits.circ")
@@ -247,17 +275,19 @@ proj.save("lab_circuits.circ")
 
 ---
 
-## 7. Verification Checklist
+## 8. Verification Checklist
 
 Before finalizing any `.circ` file, verify:
 
 1. **Toolbar & Mappings Included:** Verify `<toolbar>` contains Poke Tool and Edit Tool.
 2. **All coordinates are multiples of 10.**
 3. **Every wire has either $X_1 = X_2$ or $Y_1 = Y_2$** (zero diagonal lines).
-4. **No loose wire ends:** Taps land on exact port offsets.
-5. **No label collisions:** Pin array pitch is $\ge 30\text{--}40$ px; inputs face east (`labelloc="west"`), outputs face west (`labelloc="east"`).
-6. **No overlapping collinear wire runs:** Use `add_vbus` / `add_hbus` for bus taps.
-7. **Run automated validator:**
+4. **No wire passes through a gate center $Y = Y_g$** (prevents red feedback loop bug).
+5. **Multi-input gates have adequate vertical clearance:** $\Delta Y \ge \max(120, K \times 14) + 60$ px.
+6. **No amputated stubs:** $X_0$ bus line runs full length down to $Y_{bottom}$.
+7. **No label collisions:** Top pin array pitch is $\Delta X \ge 40$ px; inputs face south (`labelloc="north"`).
+8. **No overlapping collinear wire runs:** Use `add_vbus` / `add_hbus` for bus taps.
+9. **Run automated validator:**
    ```bash
    cmd.exe /c "python scripts/validate_circ.py <path_to_circuit.circ>"
    ```
