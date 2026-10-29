@@ -29,7 +29,7 @@ flowchart TD
     Modular --> ScriptGen
     
     ScriptGen --> Save["Emit .circ File<br>(with mandatory toolbar & mappings)"]
-    Save --> Audit["Automated Inspection (0.5s)<br>inspect_circ.py (Zero shorts, zero dangling wires)"]
+    Save --> Audit["Automated Inspection (0.5s)<br>inspect_circ.py (Zero shorts, zero overlaps, zero stubs)"]
     Audit --> Delivery["Deliver Production-Ready Schematic"]
 ```
 
@@ -99,7 +99,7 @@ Every generated `.circ` file **must** include the following blocks directly afte
 
 ---
 
-## 3. Ergonomic Layout & Wiring Principles
+## 3. Ergonomic Layout, Spacing & Anti-Collision Principles
 
 ### 3.1 Strict 10-Pixel Grid Alignment
 - Every component anchor `loc="(X,Y)"` and every wire endpoint `from="(X1,Y1)" to="(X2,Y2)"` **must be an integer multiple of 10**.
@@ -111,16 +111,23 @@ Every generated `.circ` file **must** include the following blocks directly afte
   - Vertical: $X_1 = X_2$
 - **Diagonal wires are strictly forbidden.** Connecting two points $(X_1, Y_1)$ and $(X_2, Y_2)$ requires two orthogonal segments connected through a corner point $(X_2, Y_1)$ or $(X_1, Y_2)$.
 
-### 3.3 Pin Pitch & Label Clearance Rules
-- **Vertical Pin Arrays:** Place pins vertically on the left with a pitch of **$\ge 30\text{--}40$ px** (e.g., $Y = 100, 130, 160, 190 \dots$).
-- **Horizontal Pin Arrays:** Placing pins horizontally side-by-side with $\le 20$ px pitch causes severe label collisions (e.g. "X18" and "X19" overlapping). Always maintain $\ge 40$ px if horizontal placement is used (e.g., matrix encoders).
+### 3.3 Pin Pitch & Anti-Overlap Rules (Strict Geometric Spacing)
+In Logisim, a Pin symbol has a circle/square body with a diameter of 20 px (radius 10 px).
+- **Prohibition of Overlapping Pin Bodies:**
+  Placing adjacent pins with pitch $\Delta Y \le 10\text{ px}$ or $\Delta X \le 10\text{ px}$ causes their physical bodies and inner circles to intersect and overlap (the infamous $S_4 / P_4$ defect). Pitch $< 20\text{ px}$ is a fatal visual bug.
+- **Vertical Pin Arrays:** Place pins vertically with a pitch of **$\Delta Y \ge 30\text{--}40$ px** (e.g., $Y = 100, 140, 180, 220 \dots$).
+- **Horizontal Pin Arrays:** Maintain a pitch of **$\Delta X \ge 40$ px** (e.g., $X = 120, 160, 200 \dots$) to prevent multi-character label collisions (e.g., `X18` and `X19` text colliding).
 - **Label Orientation:**
   - Left-hand inputs: `facing="east"`, `labelloc="west"`.
   - Right-hand outputs: `facing="west"`, `output="true"`, `labelloc="east"`.
   - Top inputs: `facing="south"`, `labelloc="north"`.
   - Bottom outputs: `facing="north"`, `output="true"`, `labelloc="south"`.
 
-### 3.4 Segmented Bus Routing & Strict Wire Termination
+### 3.4 Component Clearance & Zero Wire-Through-Body Penetration
+- **Component Bounding Box Clearance:** Maintain at least 20-30 px of clean canvas margin between the boundaries of adjacent component symbols (gates, flip-flops, adders).
+- **Zero Wire Penetration:** Wires must **NEVER** pass through the interior of any gate, flip-flop, adder, or macro component without terminating at a legitimate perimeter port. Route wires along dedicated distribution corridors with $\ge 20\text{ px}$ clearance around components.
+
+### 3.5 Segmented Bus Routing & Strict Wire Termination
 - **Segmented Point-to-Point Runs:** When tapping a bus line at multiple points, **never draw a single continuous wire across all taps**. In Logisim, overlapping collinear wire segments can cause phantom shorts or failing T-junctions.
   - For vertical bus at $X$ with taps at $Y_0, Y_1, Y_2$: create wire $(X, Y_0) \to (X, Y_1)$ and wire $(X, Y_1) \to (X, Y_2)$.
   - Helper methods `c.add_vbus(x, [y0, y1, y2])` and `c.add_hbus(y, [x0, x1, x2])` automatically sort coordinates and create clean point-to-point subsegments.
@@ -130,7 +137,7 @@ Every generated `.circ` file **must** include the following blocks directly afte
   - For each input $X_i$, its vertical bus starts at the pin and ends at $\max(\text{gate\_taps}[X_i])$.
   - If an input has zero gate connections (such as $X_0$ in a pure binary encoder where $0_{10} = 00000_2$), **do NOT draw a dangling vertical stub**. An input pin without a dangling stub is valid, whereas a wire ending in empty space is a defect.
 
-### 3.5 Component Labeling Rules (Strict Academic Standards)
+### 3.6 Component Labeling Rules (Strict Academic Standards)
 - **Label Inputs and Outputs ONLY:**
   - Pins representing inputs (`Pin` with `output="false"`, e.g. `A0`, `A1`, `E`, `DI`, `X0...X19`) and outputs (`Pin` with `output="true"`, e.g. `Y0...Y4`, `DO0...DO7`) **must** be clearly labeled according to the user's task or laboratory specifications.
 - **Never Label Internal Logic Gates or Flip-Flops:**
@@ -138,7 +145,7 @@ Every generated `.circ` file **must** include the following blocks directly afte
   - *Rationale:* In Logisim, component labels are drawn directly on top of the gate body or beside it. Labeling every internal gate (e.g. `AND_0`, `OR_Y1`, `NOT_1`) clutters the schematic, violates ГОСТ/academic electrical diagram conventions, and causes rejection.
   - Labels on internal elements are permitted **ONLY** when explicitly requested by the user.
 
-### 3.6 Perpendicular (Normal) Port Entry & Exit Rule
+### 3.7 Perpendicular (Normal) Port Entry & Exit Rule
 Connecting wires directly into component pins tangentially or along the edge of the component symbol looks broken and violates electrical schematic standards:
 
 ```text
@@ -181,45 +188,44 @@ Connecting wires directly into component pins tangentially or along the edge of 
 For a component placed at anchor `loc="(X,Y)"`, its pin positions are calculated as `(X + dx, Y + dy)`.
 
 ### 4.1 Wiring (`lib="0"`)
-| Component | Default Attributes | Pin Name | dx | dy | Direction |
-| :--- | :--- | :--- | :---: | :---: | :--- |
-| **Pin (Input)** | `facing="east"`, `output="false"` | `pin` | `0` | `0` | Output to circuit |
-| **Pin (Output)** | `facing="west"`, `output="true"` | `pin` | `0` | `0` | Input from circuit |
-| **Clock** | `facing="east"` | `out` | `0` | `0` | Clock signal |
-| **Constant** | `facing="east"`, `value="0x1"` | `out` | `0` | `0` | Output |
-| **Power** | `facing="north"` | `out` | `0` | `0` | VCC |
-| **Ground** | `facing="south"` | `out` | `0` | `0` | GND |
-| **Tunnel** | `facing="west"` | `pin` | `0` | `0` | Shared net |
-| **Splitter** | `facing="east"`, `fanout="2"` | `trunk`<br>`out0`<br>`out1` | `0`<br>`20`<br>`20` | `0`<br>`-20`<br>`-10` | Combined bus<br>Bit 0<br>Bit 1 |
+| Component | Default Attributes | Pin Name | dx | dy | Direction | Footprint |
+| :--- | :--- | :--- | :---: | :---: | :--- | :--- |
+| **Pin (Input)** | `facing="east"`, `output="false"` | `pin` | `0` | `0` | Output to circuit | $20 \times 20$ px |
+| **Pin (Output)** | `facing="west"`, `output="true"` | `pin` | `0` | `0` | Input from circuit | $\varnothing 20$ px |
+| **Clock** | `facing="east"` | `out` | `0` | `0` | Clock signal | $20 \times 20$ px |
+| **Constant** | `facing="east"`, `value="0x1"` | `out` | `0` | `0` | Output | $20 \times 20$ px |
+| **Power** | `facing="north"` | `out` | `0` | `0` | VCC | $20 \times 15$ px |
+| **Ground** | `facing="south"` | `out` | `0` | `0` | GND | $20 \times 15$ px |
+| **Tunnel** | `facing="west"` | `pin` | `0` | `0` | Shared net | Text box |
+| **Splitter** | `facing="east"`, `fanout="2"` | `trunk`<br>`out0`<br>`out1` | `0`<br>`20`<br>`20` | `0`<br>`-20`<br>`-10` | Combined bus<br>Bit 0<br>Bit 1 | Variable |
 
 ### 4.2 Logic Gates (`lib="1"`)
 Gates facing `east` have their output at `(0, 0)` relative to `loc`.
 
 #### Standard Size (`size="50"`, medium):
-| Gate | Inputs | Input Pin Offsets `(dx, dy)` | Output `(dx, dy)` |
-| :--- | :---: | :--- | :---: |
-| **AND Gate** | 2 | `in0: (-50, -20)`, `in1: (-50, 20)` | `(0, 0)` |
-| **AND Gate** | 3 | `in0: (-50, -20)`, `in1: (-50, 0)`, `in2: (-50, 20)` | `(0, 0)` |
-| **AND Gate** | 4 | `in0: (-50, -20)`, `in1: (-50, -10)`, `in2: (-50, 10)`, `in3: (-50, 20)` | `(0, 0)` |
-| **AND Gate** | 5 | `in0: (-50, -20)`, `in1: (-50, -10)`, `in2: (-50, 0)`, `in3: (-50, 10)`, `in4: (-50, 20)` | `(0, 0)` |
-| **AND Gate** | 8 | `(-50, -40)`, `(-50, -30)`, `(-50, -20)`, `(-50, -10)`, `(-50, 10)`, `(-50, 20)`, `(-50, 30)`, `(-50, 40)` | `(0, 0)` |
-| **OR Gate** | 2 | `in0: (-50, -20)`, `in1: (-50, 20)` | `(0, 0)` |
-| **OR Gate** | 3 | `in0: (-50, -20)`, `in1: (-50, 0)`, `in2: (-50, 20)` | `(0, 0)` |
-| **OR Gate** | 4 | `in0: (-50, -20)`, `in1: (-50, -10)`, `in2: (-50, 10)`, `in3: (-50, 20)` | `(0, 0)` |
-| **OR Gate** | 5 | `in0: (-50, -20)`, `in1: (-50, -10)`, `in2: (-50, 0)`, `in3: (-50, 10)`, `in4: (-50, 20)` | `(0, 0)` |
-| **OR Gate** | 8 | `(-50, -40)`, `(-50, -30)`, `(-50, -20)`, `(-50, -10)`, `(-50, 10)`, `(-50, 20)`, `(-50, 30)`, `(-50, 40)` | `(0, 0)` |
-| **NAND Gate** | 2 | `in0: (-60, -20)`, `in1: (-60, 20)` (bubble adds 10px width) | `(0, 0)` |
-| **NOR Gate** | 2 | `in0: (-60, -20)`, `in1: (-60, 20)` | `(0, 0)` |
-| **XOR Gate** | 2 | `in0: (-60, -20)`, `in1: (-60, 20)` | `(0, 0)` |
-| **XNOR Gate** | 2 | `in0: (-70, -20)`, `in1: (-70, 20)` (extra curve + bubble) | `(0, 0)` |
+| Gate | Inputs | Input Pin Offsets `(dx, dy)` | Output `(dx, dy)` | Bounding Box Footprint |
+| :--- | :---: | :--- | :---: | :--- |
+| **AND Gate** | 2 | `in0: (-50, -20)`, `in1: (-50, 20)` | `(0, 0)` | $50 \times 50$ px |
+| **AND Gate** | 3 | `in0: (-50, -20)`, `in1: (-50, 0)`, `in2: (-50, 20)` | `(0, 0)` | $50 \times 50$ px |
+| **AND Gate** | 4 | `in0: (-50, -20)`, `in1: (-50, -10)`, `in2: (-50, 10)`, `in3: (-50, 20)` | `(0, 0)` | $50 \times 50$ px |
+| **AND Gate** | 5 | `in0: (-50, -20)`, `in1: (-50, -10)`, `in2: (-50, 0)`, `in3: (-50, 10)`, `in4: (-50, 20)` | `(0, 0)` | $50 \times 50$ px |
+| **AND Gate** | 8 | `(-50, -40)` ... `(-50, 40)` | `(0, 0)` | $50 \times 90$ px |
+| **OR Gate** | 2 | `in0: (-50, -20)`, `in1: (-50, 20)` | `(0, 0)` | $50 \times 50$ px |
+| **OR Gate** | 3 | `in0: (-50, -20)`, `in1: (-50, 0)`, `in2: (-50, 20)` | `(0, 0)` | $50 \times 50$ px |
+| **OR Gate** | 5 | `in0: (-50, -20)` ... `in4: (-50, 20)` | `(0, 0)` | $50 \times 50$ px |
+| **OR Gate** | 8 | `(-50, -40)` ... `(-50, 40)` | `(0, 0)` | $50 \times 90$ px |
+| **NAND Gate** | 2 | `in0: (-60, -20)`, `in1: (-60, 20)` (bubble adds 10px width) | `(0, 0)` | $60 \times 50$ px |
+| **NOR Gate** | 2 | `in0: (-60, -20)`, `in1: (-60, 20)` | `(0, 0)` | $60 \times 50$ px |
+| **XOR Gate** | 2 | `in0: (-60, -20)`, `in1: (-60, 20)` | `(0, 0)` | $60 \times 50$ px |
+| **XNOR Gate** | 2 | `in0: (-70, -20)`, `in1: (-70, 20)` (extra curve + bubble) | `(0, 0)` | $70 \times 50$ px |
 
 #### Narrow Size (`size="30"`):
-| Gate | Inputs | Input Pin Offsets `(dx, dy)` | Output `(dx, dy)` |
-| :--- | :---: | :--- | :---: |
-| **AND Gate (Narrow)** | 2 | `in0: (-30, -10)`, `in1: (-30, 10)` | `(0, 0)` |
-| **OR Gate (Narrow)** | 2 | `in0: (-30, -10)`, `in1: (-30, 10)` | `(0, 0)` |
-| **NOT Gate** | 1 | `in: (-30, 0)` | `(0, 0)` |
-| **Buffer** | 1 | `in: (-20, 0)` | `(0, 0)` |
+| Gate | Inputs | Input Pin Offsets `(dx, dy)` | Output `(dx, dy)` | Footprint |
+| :--- | :---: | :--- | :---: | :--- |
+| **AND Gate (Narrow)** | 2 | `in0: (-30, -10)`, `in1: (-30, 10)` | `(0, 0)` | $30 \times 30$ px |
+| **OR Gate (Narrow)** | 2 | `in0: (-30, -10)`, `in1: (-30, 10)` | `(0, 0)` | $30 \times 30$ px |
+| **NOT Gate** | 1 | `in: (-30, 0)` | `(0, 0)` | $30 \times 20$ px |
+| **Buffer** | 1 | `in: (-20, 0)` | `(0, 0)` | $20 \times 20$ px |
 
 ### 4.3 Multiplexers & Decoders (`lib="2"`)
 | Component | Default Attributes | Pin Name | dx | dy | Description |
@@ -374,6 +380,13 @@ main_c.connect(fa2, "Cout", fa3, "Cin")
   - Every connection into a collector gate MUST have its own dedicated, strictly unique vertical channel $X_i$.
   - Use nested staircase routing: outer gates turn at outer $X$ channels; inner gates turn at inner $X$ channels. Zero output lines may intersect or share coordinates.
 
+### 7.8 Pitfall 8: Component Bounding Box Overlap & Insufficient Pin Pitch (Ошибка наложения корпусов компонентов и меток)
+- **Problem:** Placing adjacent pins with $\Delta Y = 10\text{ px}$ or $\Delta X = 10\text{ px}$. Since a Pin symbol has a 20 px diameter footprint, placing pins closer than 20 px causes their circle bodies and text labels to physically collide and merge into an unreadable blob (e.g. `S4` and `P4` overlapping as in adder sum and carry outputs).
+- **Strict Rule:**
+  - **Vertical Pin Pitch:** $\Delta Y \ge 30\text{--}40\text{ px}$ (absolute minimum 20 px without labels; $\ge 30\text{ px}$ with labels).
+  - **Horizontal Pin Pitch:** $\Delta X \ge 40\text{ px}$.
+  - **Component Symbols:** Maintain $\ge 20\text{ px}$ clearance between any two adjacent components. `inspect_circ.py` automatically enforces Axis-Aligned Bounding Box (AABB) non-intersection.
+
 ---
 
 ## 8. Automated Circuit Inspection & Self-Check Tool (`inspect_circ.py`)
@@ -391,7 +404,10 @@ cmd.exe /c "python scripts/inspect_circ.py <path_to_circuit.circ>"
 4. **Dangling Wire Detection:** Finds any wire endpoint that terminates in mid-air (degree 1 with no component port).
 5. **Perpendicular Port Alignment:** Enforces that every wire enters and exits component ports perpendicularly along the port normal with at least 1-2 grid cells clearance (zero tangential/grazing connections).
 6. **Electrical Short-Circuit Audit:** Detects multiple gate outputs shorted together on the same net (output contention), preventing accidental junction dots and false branching.
-7. **Electrical Connectivity & Truth Table Trace:** Traces signal propagation from every input to every gate and output pin, printing the complete logical truth table matrix to verify functionality.
+7. **Component Visual Collision & AABB Overlap Audit:** Calculates 2D bounding boxes for every component on canvas and flags an immediate error if any two components overlap spatially ($ix > 0$ and $iy > 0$).
+8. **Labeled Pin Pitch & Clearance Audit:** Verifies adjacent pins maintain $\ge 30\text{--}40\text{ px}$ pitch, preventing overlapping circle bodies and colliding text labels (e.g., `S4`/`P4`).
+9. **Wire-Through-Body Penetration Audit:** Detects wires cutting through the interior of gates or macro components without terminating at valid boundary ports.
+10. **Electrical Connectivity & Truth Table Trace:** Traces signal propagation from every input to every gate and output pin, printing the complete logical truth table matrix to verify functionality.
 
 ---
 
@@ -411,7 +427,7 @@ from scripts.logisim_builder import (
 proj = Project(name="main")
 c = proj.main
 
-# 2. Add input and output pins (labeled)
+# 2. Add input and output pins (labeled, with ample pitch >= 30-40px)
 a = c.add(Pin(80, 100, label="A"))
 b = c.add(Pin(80, 160, label="B"))
 cin = c.add(Pin(80, 240, label="Cin"))
@@ -423,7 +439,7 @@ xor2 = c.add(XorGate(400, 120, size=50))
 and2 = c.add(AndGate(400, 240, size=50))
 or1 = c.add(OrGate(520, 210, size=50))
 
-# 4. Add output pins (labeled)
+# 4. Add output pins (labeled, pitch >= 40px to prevent S/P label overlap!)
 s = c.add(Pin(580, 120, label="S", facing="west", output=True))
 cout = c.add(Pin(580, 210, label="Cout", facing="west", output=True))
 
@@ -444,14 +460,15 @@ Before delivering any `.circ` file, verify:
 1. **Toolbar & Mappings Included:** Verify `<toolbar>` contains Poke Tool and Edit Tool.
 2. **All coordinates are multiples of 10.**
 3. **Every wire has either $X_1 = X_2$ or $Y_1 = Y_2$** (zero diagonal lines).
-4. **Strict Perpendicular Port Connections:** Every wire enters and exits pins strictly perpendicular to the component edge with $\ge 10\text{--}20$ px clearance before turning (zero tangential / grazing connections).
-5. **No wire passes through a gate center $Y = Y_g$** (prevents red feedback loop bug).
-6. **Multi-input gates have adequate vertical clearance:** $\Delta Y \ge \max(120, K \times 14) + 60$ px.
-7. **Strict Wire Termination:** Vertical buses terminate strictly at their lowest connected gate tap (zero hanging lines into void).
-8. **Component Labeling:** Only inputs and outputs are labeled. Internal gates and flip-flops have `label=""`.
-9. **No label collisions:** Top pin array pitch is $\Delta X \ge 40$ px; inputs face south (`labelloc="north"`).
-10. **No overlapping collinear wire runs:** Use `add_vbus` / `add_hbus` for bus taps.
-11. **Run automated circuit inspector & validator:**
+4. **Zero Component Overlaps:** Check that no two components or pins intersect (minimum pin pitch $\ge 30\text{--}40\text{ px}$).
+5. **Zero Wire Penetration:** Wires route around components, not through gate interiors.
+6. **Strict Perpendicular Port Connections:** Every wire enters and exits pins strictly perpendicular to the component edge with $\ge 10\text{--}20$ px clearance before turning.
+7. **No wire passes through a gate center $Y = Y_g$** (prevents red feedback loop bug).
+8. **Multi-input gates have adequate vertical clearance:** $\Delta Y \ge \max(120, K \times 14) + 60$ px.
+9. **Strict Wire Termination:** Vertical buses terminate strictly at their lowest connected gate tap (zero hanging lines into void).
+10. **Component Labeling:** Only inputs and outputs are labeled. Internal gates and flip-flops have `label=""`.
+11. **No label collisions:** Top pin array pitch is $\Delta X \ge 40$ px; inputs face south (`labelloc="north"`).
+12. **Run automated circuit inspector & validator:**
     ```bash
     cmd.exe /c "python scripts/inspect_circ.py <path_to_circuit.circ>"
     cmd.exe /c "python scripts/validate_circ.py <path_to_circuit.circ>"
