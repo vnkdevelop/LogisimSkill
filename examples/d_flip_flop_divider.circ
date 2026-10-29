@@ -61,7 +61,6 @@
     </comp>
     <comp lib="4" loc="(260,160)" name="D Flip-Flop">
       <a name="trigger" val="rising"/>
-      <a name="label" val="DFF"/>
     </comp>
     <comp lib="0" loc="(360,160)" name="Pin">
       <a name="facing" val="west"/>

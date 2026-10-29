@@ -85,22 +85,18 @@
     <comp lib="1" loc="(340,100)" name="AND Gate">
       <a name="size" val="50"/>
       <a name="inputs" val="2"/>
-      <a name="label" val="Y0"/>
     </comp>
     <comp lib="1" loc="(340,180)" name="AND Gate">
       <a name="size" val="50"/>
       <a name="inputs" val="2"/>
-      <a name="label" val="Y1"/>
     </comp>
     <comp lib="1" loc="(340,260)" name="AND Gate">
       <a name="size" val="50"/>
       <a name="inputs" val="2"/>
-      <a name="label" val="Y2"/>
     </comp>
     <comp lib="1" loc="(340,340)" name="AND Gate">
       <a name="size" val="50"/>
       <a name="inputs" val="2"/>
-      <a name="label" val="Y3"/>
     </comp>
     <comp lib="0" loc="(420,100)" name="Pin">
       <a name="facing" val="west"/>

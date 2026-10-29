@@ -85,13 +85,25 @@ Every generated `.circ` file **must** include the following blocks directly afte
   - Right-hand outputs: `facing="west"`, `output="true"`, `labelloc="east"`.
 - **Horizontal Pin Warning:** Placing pins horizontally side-by-side with $\le 20$ px pitch causes severe label collisions (e.g. "X18" and "X19" overlapping). Always maintain $\ge 40$ px if horizontal placement is unavoidable, but prefer vertical arrays for multi-bit inputs.
 
-### 3.4 Segmented Bus Routing (`add_vbus` and `add_hbus`)
-- When tapping a bus line at multiple points, **never draw a single continuous wire across all taps**. In Logisim, overlapping collinear wire segments can cause phantom shorts or failing T-junctions.
-- Always use segmented lines between consecutive tap coordinates:
+### 3.4 Segmented Bus Routing & Strict Wire Termination
+- **Segmented Point-to-Point Runs:** When tapping a bus line at multiple points, **never draw a single continuous wire across all taps**. In Logisim, overlapping collinear wire segments can cause phantom shorts or failing T-junctions.
   - For vertical bus at $X$ with taps at $Y_0, Y_1, Y_2$: create wire $(X, Y_0) \to (X, Y_1)$ and wire $(X, Y_1) \to (X, Y_2)$.
   - Helper methods `c.add_vbus(x, [y0, y1, y2])` and `c.add_hbus(y, [x0, x1, x2])` automatically sort coordinates and create clean point-to-point subsegments.
+- **Strict Wire Termination (Zero Hanging Lines):**
+  - **A bus line must terminate STRICTLY at its lowest (or furthest) connected component tap.**
+  - Continuing vertical wires past the lowest connected gate into empty space ("линии вниз, они не нужны, потому что там ничего нету, просто так проведены") is strictly forbidden.
+  - For each input $X_i$, its vertical bus starts at the pin and ends at $\max(\text{gate\_taps}[X_i])$.
+  - If an input has zero gate connections (such as $X_0$ in a pure binary encoder where $0_{10} = 00000_2$), **do NOT draw a dangling vertical stub**. An input pin without a dangling stub is valid, whereas a wire ending in empty space is a defect.
 
-### 3.5 Multi-Circuit Architecture
+### 3.5 Component Labeling Rules (Strict Academic Standards)
+- **Label Inputs and Outputs ONLY:**
+  - Pins representing inputs (`Pin` with `output="false"`, e.g. `A0`, `A1`, `E`, `DI`, `X0...X19`) and outputs (`Pin` with `output="true"`, e.g. `Y0...Y4`, `DO0...DO7`) **must** be clearly labeled according to the user's task or laboratory specifications.
+- **Never Label Internal Logic Gates or Flip-Flops:**
+  - Standard logic gates (`AND Gate`, `OR Gate`, `NOT Gate`, `NAND Gate`, `NOR Gate`, `XOR Gate`, `XNOR Gate`) and sequential elements (`D Flip-Flop`, `T Flip-Flop`, `JK Flip-Flop`, `Counter`, `Register`) **MUST REMAIN UNLABELED** (`label=""`).
+  - *Rationale:* In Logisim, component labels are drawn directly on top of the gate body or beside it. Labeling every internal gate (e.g. `AND_0`, `OR_Y1`, `NOT_1`) clutters the schematic, violates ГОСТ/academic electrical diagram conventions, and causes teacher rejection.
+  - Labels on internal elements are permitted **ONLY** when explicitly and specifically requested by the user.
+
+### 3.6 Multi-Circuit Architecture
 - In academic laboratory assignments and modular designs:
   - Put the specific assigned variant in the `main` circuit.
   - Put standard classical reference designs (e.g., `Классический_8_в_3`, `Дешифратор_2_в_4_без_E`) as additional named subcircuits in the same `.circ` file.
@@ -176,13 +188,16 @@ Flip-Flop bodies are 40x40. Outputs $Q$ and $\overline{Q}$ are on the right edge
 - **Top-to-Bottom Matrix Topology («Иксы сверху»):**
   - Standard digital and academic schematics place inputs $X_0 \dots X_{N-1}$ horizontally along the top ($Y=80$) facing south (`facing="south"`, `labelloc="north"`).
   - Horizontal spacing between pins MUST be $\Delta X = 40$ px (e.g., $X = 120 + i \times 40$). This completely eliminates text label collision.
-  - From each pin $X_i$, a full vertical bus runs straight down to $Y_{bottom}$.
-  - **The $X_0$ Full-Length Bus Rule:** The bus for $X_0$ is **NEVER** cut off into a 10-20px stub. It runs the entire height of the matrix alongside $X_1 \dots X_{N-1}$ down to $Y_{bottom}$.
+  - From each pin $X_i$, a vertical bus runs straight down and terminates **STRICTLY at the lowest connected OR gate input port**.
+  - No lines continue past the bottom gate into the void.
+- **Handling of $X_0$ (Input 0):**
+  - In a standard binary encoder, input $0$ corresponds to $00000_2$. Because no output bits are active for $0$, $X_0$ does not connect to any OR gates.
+  - **Zero Dangling Wires:** Do NOT attach a dead-end 20px stub or line into empty space to $X_0$. Pin $X_0$ simply sits at $(X_0, Y_{top})$ without dangling wires.
 - **General $N$-to-$M$ Positional Logic on OR Gates:**
   For $N$ inputs $X_0 \dots X_{N-1}$ and $M = \lceil\log_2 N\rceil$ output bits $Y_0 \dots Y_{M-1}$:
   $$\text{Input } X_i \text{ connects to OR gate } Y_k \iff ((i \gg k) \ \& \ 1) == 1$$
-- **Real-World Activity / Validation Output ($V$ / $A$ / $GS$):**
-  In real encoder ICs (e.g. 74148, К555ИВ1), input $X_0$ encodes $00000_2$. To distinguish between $X_0$ being pressed vs no inputs being pressed, an Activity gate $V$ ($V = X_0 \lor X_1 \lor \dots \lor X_{N-1}$) is placed at the bottom, connecting $X_0$ actively into the circuit.
+  - Every OR gate represents one output bit ($Y_0$ weight 1, $Y_1$ weight 2, $Y_2$ weight 4, $Y_3$ weight 8, $Y_4$ weight 16).
+  - Logic gates must remain **UNLABELED** (`label=""`). Only the output pins carry labels (e.g. `Y0 (1)`, `Y1 (2)`, etc.).
 - **8-to-3 Octal Encoder:**
   - $Y_0 = X_1 + X_3 + X_5 + X_7$ (4-input OR)
   - $Y_1 = X_2 + X_3 + X_6 + X_7$ (4-input OR)
@@ -195,13 +210,13 @@ Flip-Flop bodies are 40x40. Outputs $Q$ and $\overline{Q}$ are on the right edge
   - $Y_3 = X_8 + X_9$ (2-input OR)
   - Direct builder: `build_encoder_10to4_bcd(proj, name="Шифратор_10_в_4_BCD")`.
 - **Variant Encoders (e.g. 20-to-5 for number 19):**
-  - Use `build_matrix_encoder(proj, name="main", num_inputs=20, target_variant=19, with_valid=True)`.
+  - Use `build_matrix_encoder(proj, name="main", num_inputs=20, target_variant=19, with_valid=False)`.
 
 ### 5.3 Мультиплексор (Multiplexer 4-to-1 & 8-to-1)
 - **4-to-1 Logic:**
   $$Y = (D_0 \cdot \overline{A_1} \cdot \overline{A_0} \cdot E) \lor (D_1 \cdot \overline{A_1} \cdot A_0 \cdot E) \lor (D_2 \cdot A_1 \cdot \overline{A_0} \cdot E) \lor (D_3 \cdot A_1 \cdot A_0 \cdot E)$$
 - **Structure:**
-  - 4 (or 8) AND gates combining each data input $D_i$ with its unique binary address minterm and enable $E$.
+  - 4 (or 8) AND gates combining each data input $D_i$ with its unique binary address minterm and enable $E$. Gates remain unlabeled.
   - 1 final multi-input OR gate collecting all AND gate outputs into single output $Y$.
   - Direct builders: `build_multiplexer_4to1(proj)` and `build_multiplexer_8to1(proj)`.
 
@@ -210,7 +225,7 @@ Flip-Flop bodies are 40x40. Outputs $Q$ and $\overline{Q}$ are on the right edge
   $$Y_i = DI \cdot (\text{Address} == i) \cdot E$$
 - **Structure:**
   - Single informational input $DI$, enable $E$, and address selection lines.
-  - 4 (or 8) AND gates driving independent output lines $Y_0 \dots Y_3$.
+  - 4 (or 8) AND gates driving independent output lines $Y_0 \dots Y_3$. Gates remain unlabeled.
   - Direct builders: `build_demultiplexer_1to4(proj)` and `build_demultiplexer_1to8(proj)`.
 
 ---
@@ -231,18 +246,42 @@ Flip-Flop bodies are 40x40. Outputs $Q$ and $\overline{Q}$ are on the right edge
 - **Symptom:** If an input tap or pass-through wire is routed along $Y = Y_g$, it penetrates into the gate body and touches the output pin $(X_g, Y_g)$, shorting the gate's output back into its own inputs. In Logisim, this produces an oscillating feedback loop that turns the wire **bright red** with an unconnected blue `X` on the output pin.
 - **Strict Rule:** **The horizontal coordinate $Y = Y_g$ is strictly reserved for the output wire to the right.** Never route an input wire, bus tap, or signal through $Y = Y_g$.
 
-### 6.3 Pitfall 3: The Amputated $X_0$ Stub Pitfall (Ошибка «обрубка» шины $X_0$)
-- **Problem:** In binary encoders, input $X_0$ corresponds to code $00000_2$. Because none of the bits in $00000_2$ are 1, $X_0$ does not connect to any binary output OR gates ($Y_0 \dots Y_4$). If an agent draws wires only to active bits, $X_0$ ends up with a 10-20 px stub hanging in empty space.
-- **Symptom:** The user/instructor sees a broken, cut-off wire ("X0 обрезан") and assumes the schematic is broken.
-- **Strict Rule:** In matrix encoders, the vertical bus line for $X_0$ must run down the **full length of the matrix to the exact same $Y_{bottom}$ as all other inputs ($X_1 \dots X_n$)**. In addition, to make $X_0$ actively functional as in real-world ICs (74148, К555ИВ1), connect $X_0$ to an Activity/Validation gate $V$ ($V = X_0 \lor X_1 \lor \dots \lor X_n$) or zero indicator.
+### 6.3 Pitfall 3: Dangling Lines & Dead-End Wire Stubs (Ошибка висячих проводников и лишних линий)
+- **Problem:** Two common mistakes occur when drawing bus lines:
+  1. Pulling vertical input lines down past the lowest gate into empty space ("линии вниз, они не нужны, потому что там ничего нету, просто так проведены").
+  2. Drawing an artificial 20-40px wire stub on an unconnected input (like $X_0$) that ends in mid-air.
+- **Symptom:** Logisim circuits look amateurish and fail automated topological checks. Every wire endpoint with degree 1 that doesn't connect to a pin is a dangling wire error.
+- **Strict Rule:** Every wire segment **must connect two valid points** (either component ports or a junction with another wire). Vertical bus lines stop strictly at the lowest gate port.
 
-### 6.4 Pitfall 4: Top-to-Bottom Matrix Layout vs Crowded Arrays (Топология «Иксы сверху»)
+### 6.4 Pitfall 4: Gate Label Clutter (Засорение схемы текстовыми метками вентилей)
+- **Problem:** Adding labels like `OR_Y4`, `AND_0`, `NOT` to internal logic gates.
+- **Symptom:** Logisim renders labels directly on the gate symbol. Schematics look cluttered and violate academic formatting rules.
+- **Strict Rule:** **Only input pins and output pins may carry labels.** All logic gates and flip-flops must have `label=""`.
+
+### 6.5 Pitfall 5: Top-to-Bottom Matrix Layout vs Crowded Arrays (Топология «Иксы сверху»)
 - **Problem:** Arranging 20 input pins horizontally with $\le 20$ px pitch causes severe label collisions (e.g. `X18` and `X19` overlapping into an unreadable blob).
 - **Strict Rule:** When placing pins along the top, use **$\Delta X = 40$ px pitch**, set `facing="south"`, and set `labelloc="north"`. This gives each pin 40 px of clean horizontal space, keeping all labels perfectly legible.
 
 ---
 
-## 7. Python API & Instant Code Recipes
+## 7. Automated Circuit Inspection & Self-Check Tool (`inspect_circ.py`)
+
+Always run the built-in circuit inspector before finalizing any `.circ` file:
+
+```bash
+cmd.exe /c "python scripts/inspect_circ.py <path_to_circuit.circ>"
+```
+
+### What `inspect_circ.py` Automatically Audits:
+1. **Toolbar & Mappings:** Verifies `<toolbar>` has `Poke Tool` and `Edit Tool` so GUI tools never disappear.
+2. **Strict Component Labeling:** Detects and flags any internal gates or flip-flops that have forbidden labels. Can auto-clean with `--fix-labels`.
+3. **Wire Snapping & Orthogonality:** Confirms all coordinates snap to 10px grid and zero diagonal wires exist.
+4. **Dangling Wire Detection:** Finds any wire endpoint that terminates in mid-air (degree 1 with no component port).
+5. **Electrical Connectivity & Truth Table Trace:** Traces signal propagation from every input to every gate and output pin, printing the complete logical truth table matrix to verify functionality against real-world engineering models.
+
+---
+
+## 8. Python API & Instant Code Recipes
 
 ### Recipe: Programmatic Matrix Encoder Generation
 ```python
@@ -254,14 +293,14 @@ from scripts.logisim_builder import (
 # 1. Initialize project
 proj = Project(name="main")
 
-# 2. Add canonical matrix encoder (inputs along top, full X0 bus, no red loops)
+# 2. Add canonical matrix encoder (inputs along top, strictly terminated wires, unlabeled gates)
 build_matrix_encoder(
     proj,
     name="main",
     num_inputs=20,
-    title="Матричный шифратор 20 в 5: число 19 (10011_2)",
+    title="Шифратор 20 в 5: число 19 (10011_2) (Вариант 9, Табл. 4.2)",
     target_variant=19,
-    with_valid=True
+    with_valid=False
 )
 
 # 3. Add other standard laboratory blocks
@@ -275,19 +314,21 @@ proj.save("lab_circuits.circ")
 
 ---
 
-## 8. Verification Checklist
+## 9. Verification Checklist
 
-Before finalizing any `.circ` file, verify:
+Before delivering any `.circ` file, verify:
 
 1. **Toolbar & Mappings Included:** Verify `<toolbar>` contains Poke Tool and Edit Tool.
 2. **All coordinates are multiples of 10.**
 3. **Every wire has either $X_1 = X_2$ or $Y_1 = Y_2$** (zero diagonal lines).
 4. **No wire passes through a gate center $Y = Y_g$** (prevents red feedback loop bug).
 5. **Multi-input gates have adequate vertical clearance:** $\Delta Y \ge \max(120, K \times 14) + 60$ px.
-6. **No amputated stubs:** $X_0$ bus line runs full length down to $Y_{bottom}$.
-7. **No label collisions:** Top pin array pitch is $\Delta X \ge 40$ px; inputs face south (`labelloc="north"`).
-8. **No overlapping collinear wire runs:** Use `add_vbus` / `add_hbus` for bus taps.
-9. **Run automated validator:**
-   ```bash
-   cmd.exe /c "python scripts/validate_circ.py <path_to_circuit.circ>"
-   ```
+6. **Strict Wire Termination:** Vertical buses terminate strictly at their lowest connected gate tap (zero hanging lines into void).
+7. **Component Labeling:** Only inputs and outputs are labeled. Internal gates and flip-flops have `label=""`.
+8. **No label collisions:** Top pin array pitch is $\Delta X \ge 40$ px; inputs face south (`labelloc="north"`).
+9. **No overlapping collinear wire runs:** Use `add_vbus` / `add_hbus` for bus taps.
+10. **Run automated circuit inspector & validator:**
+    ```bash
+    cmd.exe /c "python scripts/inspect_circ.py <path_to_circuit.circ>"
+    cmd.exe /c "python scripts/validate_circ.py <path_to_circuit.circ>"
+    ```

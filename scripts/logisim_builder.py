@@ -863,7 +863,7 @@ def build_decoder_2to4(project: Project, name: str = "main", with_enable: bool =
 
     for i in range(4):
         yg = y_gates[i]
-        ag = c.add(AndGate(380, yg, inputs=num_inputs, size=50, label=f"Y{i}"))
+        ag = c.add(AndGate(380, yg, inputs=num_inputs, size=50))
         and_gates.append(ag)
         yp = c.add(Pin(460, yg, label=f"Y{i}", facing="west", output=True, labelloc="east"))
         c.connect(ag, "out", yp, "pin")
@@ -910,22 +910,23 @@ def build_matrix_encoder(
     num_inputs: int = 8,
     title: str = "",
     target_variant: Optional[int] = None,
-    with_valid: bool = True
+    with_valid: bool = False
 ) -> Circuit:
     """
     Builds a canonical Matrix Encoder (топология 'Иксы сверху').
     - Inputs X0...X_{N-1} placed along the top horizontal line at Y=80 (facing="south", labelloc="north").
     - Ample pitch dx=40px completely eliminates label collisions.
-    - Full vertical bus lines run for ALL inputs (including X0!) down to the bottom of the matrix.
-    - OR gates are placed on the right, generously spaced vertically so gate bodies never collide.
-    - Row Y = Y_gate is strictly reserved for the output wire, preventing the red feedback loop bug.
-    - Optional Activity/Validation output V (Any active) connects X0...X_{N-1}.
+    - Each vertical input bus line starts strictly at the pin (Y=80) and terminates
+      STRICTLY at its lowest connected gate tap (no dangling tails into empty space).
+    - Unused inputs (like X0 which encodes 00000_2) do not draw dangling wires.
+    - Logic gates remain UNLABELED (strictly adhering to component naming rules).
+    - Row Y = Y_gate is strictly reserved for the output wire, preventing oscillatory loops.
     """
     import math
     c = project.get_or_create_circuit(name)
 
     if title:
-        c.add(Text(500, 30, title, font="SansSerif bold 14"))
+        c.add(Text(500, 35, title, font="SansSerif bold 14"))
 
     x_start = 120
     x_pitch = 40
@@ -933,7 +934,7 @@ def build_matrix_encoder(
 
     num_bits = max(1, math.ceil(math.log2(num_inputs)))
 
-    # Determine vertical gate placement with generous pitch (>= 120-160px)
+    # Determine vertical gate placement with generous pitch (>= 120-180px)
     gate_configs = []
     y_gate_curr = 150
     for bit in reversed(range(num_bits)):
@@ -949,27 +950,23 @@ def build_matrix_encoder(
     if with_valid:
         sources_all = list(range(num_inputs))
         valid_config = ("V", "V (Активность)", y_gate_curr, sources_all, num_inputs)
-        y_bottom = y_gate_curr + max(60, num_inputs * 6) + 40
-    else:
-        y_bottom = y_gate_curr + 40
 
     # Place top input pins
-    input_pins = []
     for i in range(num_inputs):
         x_pos = x_start + i * x_pitch
         lbl = f"X{i}"
         if target_variant is not None and i == target_variant:
             lbl = f"X{i} ({target_variant})"
-        p = c.add(Pin(x_pos, y_top, label=lbl, facing="south", labelloc="north"))
-        input_pins.append(p)
+        c.add(Pin(x_pos, y_top, label=lbl, facing="south", labelloc="north"))
 
     x_gate = x_start + num_inputs * x_pitch + 80
     x_in_port = x_gate - 50
     x_out_pin = x_gate + 60
 
-    input_taps: Dict[int, List[int]] = {i: [y_top, y_bottom] for i in range(num_inputs)}
+    # Only record ACTUAL gate taps for each input (no synthetic y_bottom!)
+    input_taps: Dict[int, List[int]] = {i: [] for i in range(num_inputs)}
 
-    # Place binary output OR gates
+    # Place binary output OR gates (UNLABELED)
     for bit, label, y_g, sources, k_in in gate_configs:
         if k_in == 0:
             gnd = c.add(Ground(x_gate, y_g))
@@ -981,7 +978,7 @@ def build_matrix_encoder(
             input_taps[src_idx].append(y_g)
             c.wire((x_start + src_idx * x_pitch, y_g), (x_out_pin, y_g))
         else:
-            g = c.add(OrGate(x_gate, y_g, inputs=k_in, size=50, label=f"OR_Y{bit}"))
+            g = c.add(OrGate(x_gate, y_g, inputs=k_in, size=50))
             out_pin = c.add(Pin(x_out_pin, y_g, label=label, facing="west", output=True, labelloc="east"))
             c.connect(g, "out", out_pin, "pin")
 
@@ -992,10 +989,10 @@ def build_matrix_encoder(
                 input_taps[src_idx].append(y_tap)
                 c.wire((x_src, y_tap), (x_in_port, y_tap))
 
-    # Place Valid / Activity gate if requested
+    # Place Valid / Activity gate ONLY if explicitly requested
     if valid_config:
         bit, label, y_g, sources, k_in = valid_config
-        g = c.add(OrGate(x_gate, y_g, inputs=k_in, size=50, label="OR_V"))
+        g = c.add(OrGate(x_gate, y_g, inputs=k_in, size=50))
         out_pin = c.add(Pin(x_out_pin, y_g, label=label, facing="west", output=True, labelloc="east"))
         c.connect(g, "out", out_pin, "pin")
 
@@ -1006,24 +1003,28 @@ def build_matrix_encoder(
             input_taps[src_idx].append(y_tap)
             c.wire((x_src, y_tap), (x_in_port, y_tap))
 
-    # Draw full-length segmented vertical bus lines for ALL inputs (including X0!)
+    # Draw vertical bus lines strictly from y_top down to the LOWEST tap for that input
+    # If an input has no taps (e.g. X0 in pure binary encoder), no dangling wire is drawn
     for i in range(num_inputs):
         x_pos = x_start + i * x_pitch
-        c.add_vbus(x_pos, input_taps[i])
+        taps = input_taps[i]
+        if taps:
+            all_points = [y_top] + taps
+            c.add_vbus(x_pos, all_points)
 
     return c
 
 
 def build_encoder_n_to_m(project: Project, name: str = "main", num_inputs: int = 8) -> Circuit:
-    return build_matrix_encoder(project, name=name, num_inputs=num_inputs, with_valid=True)
+    return build_matrix_encoder(project, name=name, num_inputs=num_inputs, with_valid=False)
 
 
 def build_encoder_8to3(project: Project, name: str = "Классический_8_в_3") -> Circuit:
-    return build_matrix_encoder(project, name=name, num_inputs=8, title="Классический шифратор 8 в 3", target_variant=7, with_valid=True)
+    return build_matrix_encoder(project, name=name, num_inputs=8, title="Классический шифратор 8 в 3", target_variant=7, with_valid=False)
 
 
 def build_encoder_10to4_bcd(project: Project, name: str = "Шифратор_10_в_4_BCD") -> Circuit:
-    return build_matrix_encoder(project, name=name, num_inputs=10, title="Шифратор 10 в 4 BCD", target_variant=9, with_valid=True)
+    return build_matrix_encoder(project, name=name, num_inputs=10, title="Шифратор 10 в 4 BCD", target_variant=9, with_valid=False)
 
 
 def build_multiplexer_4to1(project: Project, name: str = "main", with_enable: bool = True) -> Circuit:
@@ -1059,13 +1060,13 @@ def build_multiplexer_4to1(project: Project, name: str = "main", with_enable: bo
     y_and = [100, 160, 220, 280]
 
     for i in range(4):
-        ag = c.add(AndGate(440, y_and[i], inputs=and_inputs, size=50, label=f"AND_{i}"))
+        ag = c.add(AndGate(440, y_and[i], inputs=and_inputs, size=50))
         and_gates.append(ag)
         # Connect Data input directly
         c.connect(d_pins[i], "pin", ag, "in0", routing="hv")
 
     # OR Gate combining all 4 channels
-    or_gate = c.add(OrGate(580, 190, inputs=4, size=50, label="OR_OUT"))
+    or_gate = c.add(OrGate(580, 190, inputs=4, size=50))
     out_pin = c.add(Pin(660, 190, label="Y", facing="west", output=True, labelloc="east"))
     c.connect(or_gate, "out", out_pin, "pin")
 
@@ -1148,12 +1149,12 @@ def build_multiplexer_8to1(project: Project, name: str = "main", with_enable: bo
     y_and = [100 + i * 50 for i in range(8)]
 
     for i in range(8):
-        ag = c.add(AndGate(460, y_and[i], inputs=and_inputs, size=50, label=f"AND_{i}"))
+        ag = c.add(AndGate(460, y_and[i], inputs=and_inputs, size=50))
         and_gates.append(ag)
         c.connect(d_pins[i], "pin", ag, "in0", routing="hv")
 
     # OR Gate combining all 8 channels
-    or_gate = c.add(OrGate(640, 270, inputs=8, size=50, label="OR_OUT"))
+    or_gate = c.add(OrGate(640, 270, inputs=8, size=50))
     out_pin = c.add(Pin(720, 270, label="Y", facing="west", output=True, labelloc="east"))
     c.connect(or_gate, "out", out_pin, "pin")
 
@@ -1192,7 +1193,7 @@ def build_demultiplexer_1to4(project: Project, name: str = "main", with_enable: 
     in_x = 370
 
     for i in range(4):
-        ag = c.add(AndGate(420, y_and[i], inputs=and_inputs, size=50, label=f"AND_{i}"))
+        ag = c.add(AndGate(420, y_and[i], inputs=and_inputs, size=50))
         yp = c.add(Pin(500, y_and[i], label=f"Y{i}", facing="west", output=True, labelloc="east"))
         c.connect(ag, "out", yp, "pin")
 
@@ -1268,7 +1269,7 @@ def build_demultiplexer_1to8(project: Project, name: str = "main", with_enable: 
     and_inputs = 5 if with_enable else 4
 
     for i in range(8):
-        ag = c.add(AndGate(460, y_and[i], inputs=and_inputs, size=50, label=f"AND_{i}"))
+        ag = c.add(AndGate(460, y_and[i], inputs=and_inputs, size=50))
         yp = c.add(Pin(540, y_and[i], label=f"Y{i}", facing="west", output=True, labelloc="east"))
         c.connect(ag, "out", yp, "pin")
 

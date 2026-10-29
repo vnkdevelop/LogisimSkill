@@ -18,6 +18,7 @@ from logisim_builder import (
     build_matrix_encoder, build_multiplexer_4to1, build_demultiplexer_1to4
 )
 from validate_circ import validate_circ
+from inspect_circ import inspect_circuit
 
 
 class TestLogisimBuilder(unittest.TestCase):
@@ -39,9 +40,9 @@ class TestLogisimBuilder(unittest.TestCase):
         pin_a = c.add(Pin(80, 100, label="A"))
         pin_b = c.add(Pin(80, 140, label="B"))
 
-        # Gates
-        xor_gate = c.add(XorGate(260, 110, inputs=2, size=50, label="XOR"))
-        and_gate = c.add(AndGate(260, 190, inputs=2, size=50, label="AND"))
+        # Gates (unlabeled per academic standards)
+        xor_gate = c.add(XorGate(260, 110, inputs=2, size=50))
+        and_gate = c.add(AndGate(260, 190, inputs=2, size=50))
 
         # Outputs
         pin_s = c.add(Pin(360, 110, label="Sum", facing="west", output=True))
@@ -81,11 +82,11 @@ class TestLogisimBuilder(unittest.TestCase):
         # Connect a1 -> not1
         c.connect(a1, "pin", not1, "in", routing="hv")
 
-        # 4 AND gates
-        and0 = c.add(AndGate(340, 100, inputs=2, size=50, label="Y0"))
-        and1 = c.add(AndGate(340, 180, inputs=2, size=50, label="Y1"))
-        and2 = c.add(AndGate(340, 260, inputs=2, size=50, label="Y2"))
-        and3 = c.add(AndGate(340, 340, inputs=2, size=50, label="Y3"))
+        # 4 AND gates (unlabeled)
+        and0 = c.add(AndGate(340, 100, inputs=2, size=50))
+        and1 = c.add(AndGate(340, 180, inputs=2, size=50))
+        and2 = c.add(AndGate(340, 260, inputs=2, size=50))
+        and3 = c.add(AndGate(340, 340, inputs=2, size=50))
 
         # Outputs
         y0 = c.add(Pin(420, 100, label="Y0=!a1!a0", facing="west", output=True))
@@ -125,7 +126,7 @@ class TestLogisimBuilder(unittest.TestCase):
         c = proj.main
 
         clk_pin = c.add(Pin(100, 180, label="CLK"))
-        dff = c.add(DFlipFlop(260, 160, label="DFF"))
+        dff = c.add(DFlipFlop(260, 160))
         q_pin = c.add(Pin(360, 160, label="Q", facing="west", output=True))
         notq_pin = c.add(Pin(360, 180, label="!Q", facing="west", output=True))
 
@@ -184,11 +185,23 @@ class TestLogisimBuilder(unittest.TestCase):
         build_encoder_8to3(proj, name="Классический_8_в_3")
         build_multiplexer_4to1(proj, name="Мультиплексор_4_в_1", with_enable=True)
         build_demultiplexer_1to4(proj, name="Демультиплексор_1_в_4", with_enable=True)
-        build_matrix_encoder(proj, name="Шифратор_20_в_5", num_inputs=20, target_variant=19, with_valid=True)
+        build_matrix_encoder(proj, name="Шифратор_20_в_5", num_inputs=20, target_variant=19, with_valid=False)
 
         out_path = os.path.join(self.examples_dir, "canonical_suite.circ")
         proj.save(out_path)
         self.assertTrue(validate_circ(out_path, self.logisim_jar if os.path.exists(self.logisim_jar) else None))
+
+    def test_circuit_inspection_strict_compliance(self):
+        """Verifies that all generated circuits strictly pass inspect_circuit."""
+        encoder_proj = Project(name="main")
+        build_matrix_encoder(encoder_proj, name="main", num_inputs=20, target_variant=19, with_valid=False)
+        enc_path = os.path.join(self.examples_dir, "matrix_encoder_20to5.circ")
+        encoder_proj.save(enc_path)
+
+        rep = inspect_circuit(enc_path, strict=True)
+        self.assertTrue(rep.passed, f"Encoder inspection failed: {rep.errors}")
+        self.assertEqual(len(rep.dangling_endpoints), 0, "No dangling endpoints allowed")
+        self.assertEqual(len(rep.gates), 5, "Strictly 5 OR gates for 20-to-5 encoder")
 
 
 if __name__ == "__main__":
