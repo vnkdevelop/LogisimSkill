@@ -109,6 +109,19 @@ Every generated `.circ` file **must** include the following blocks directly afte
   - Put standard classical reference designs (e.g., `Классический_8_в_3`, `Дешифратор_2_в_4_без_E`) as additional named subcircuits in the same `.circ` file.
   - This allows instructors and students to inspect both the textbook base circuit and the assigned variant in a single file.
 
+### 3.7 Topology Freedom & Canonical Reference Compliance (Свобода компоновки и соответствие первоисточникам)
+- **Категорический запрет на догматический хардкод компоновки:** Нельзя жестко фиксировать единую ориентацию («входы всегда только сверху, а выходы только справа» или «провод всегда только вниз к Y»). Схемы в цифровой схемотехнике разнообразны и должны выглядеть так, как их привыкли видеть инженеры, преподаватели и студенты в учебниках и справочниках:
+  1. **Входы слева $\to$ выходы справа:** Классический горизонтальный поток сигналов (дешифраторы, сумматоры, мультиплексоры, регистры, шифраторы горизонтального типа).
+  2. **Входы сверху $\to$ выходы справа или снизу:** Матричные шифраторы, матричные преобразователи кодов, диодные сетки, таблицы прошивок ПЗУ.
+  3. **Входы снизу $\to$ выходы сверху:** Линии адресации и стробирования, шины выбора кристаллов (CS/OE).
+  4. **Любая иная каноническая ориентация из задания:** Если в методичке, даташите или на схеме из интернета выходы расположены внизу, а входы справа — схема должна строиться именно в этой канонической проекции.
+- **Инварианты качества при любой ориентации:**
+  - Сигналы движутся естественно и читаемо, без визуальной каши.
+  - Каждый проводник соединяет ровно те точки, которые требуются, и не продолжается дальше в пустоту (строгий запрет холостых хвостов).
+  - Ни один провод не пересекает выходной пин вентиля или его корпус (полная защита от красных петель и КЗ).
+  - Все координаты кратны 10px, сетка строгая, проводники строго ортогональны (Manhattan).
+  - Схема функционально 100% работоспособна и верифицирована.
+
 ---
 
 ## 4. Ground-Truth Component Pin Geometry
@@ -184,15 +197,14 @@ Flip-Flop bodies are 40x40. Outputs $Q$ and $\overline{Q}$ are on the right edge
   - Vertical distribution buses for $E$ ($X=100$), $A_0$ ($X=120$), $A_1$ ($X=140$), $\overline{A_0}$ ($X=220$), $\overline{A_1}$ ($X=240$).
   - Direct builder: `build_decoder_2to4(proj, name="main", with_enable=True)`.
 
-### 5.2 Шифратор (Binary & Positional Matrix Encoders)
-- **Top-to-Bottom Matrix Topology («Иксы сверху»):**
-  - Standard digital and academic schematics place inputs $X_0 \dots X_{N-1}$ horizontally along the top ($Y=80$) facing south (`facing="south"`, `labelloc="north"`).
-  - Horizontal spacing between pins MUST be $\Delta X = 40$ px (e.g., $X = 120 + i \times 40$). This completely eliminates text label collision.
-  - From each pin $X_i$, a vertical bus runs straight down and terminates **STRICTLY at the lowest connected OR gate input port**.
-  - No lines continue past the bottom gate into the void.
-- **Handling of $X_0$ (Input 0):**
-  - In a standard binary encoder, input $0$ corresponds to $00000_2$. Because no output bits are active for $0$, $X_0$ does not connect to any OR gates.
-  - **Zero Dangling Wires:** Do NOT attach a dead-end 20px stub or line into empty space to $X_0$. Pin $X_0$ simply sits at $(X_0, Y_{top})$ without dangling wires.
+### 5.2 Шифратор (Binary & Positional Encoders)
+- **Топологическая гибкость (Top-to-Right vs Left-to-Right):**
+  Шифраторы строятся в соответствии с тем, как они представлены в конкретном задании или учебнике:
+  1. **Матричная компоновка («Иксы сверху»):** Входы $X_0 \dots X_{N-1}$ размещаются сверху горизонтально ($Y=80$) с направлением на юг (`facing="south"`, `labelloc="north"`). Шаг $\Delta X \ge 40$ px исключает наложение меток. Шины опускаются к элементам ИЛИ справа и заканчиваются строго на нижнем подключенном контакте. Идеально для многовходовых шифраторов (16..20 входов).
+  2. **Классическая горизонтальная компоновка («Иксы слева»):** Входы $X_0 \dots X_{N-1}$ располагаются вертикально слева (`facing="east"`), вертикальные шины распределяют сигналы на элементы ИЛИ справа. Общепринята в учебниках для базовых шифраторов 4-в-2, 8-в-3, 10-в-4 BCD. При горизонтальной компоновке строго соблюдается правило защиты: линия $Y = Y_g$ резервируется под выходной провод, а входы вентилей заводятся с шагом $dy = \pm 10, \pm 20 \dots$, что гарантирует отсутствие паразитных петель.
+- **Правило для $X_0$ (Вход 0):**
+  - В простом шифраторе вход $X_0$ кодирует $00000_2$. Поскольку ни один бит не активен, $X_0$ не подается на элементы ИЛИ.
+  - **Запрет висячих отрезков:** На пин $X_0$ категорически запрещено вешать холостой отрезок провода в 20-40px, обрывающийся в воздухе. Пин $X_0$ располагается чисто, без висячих концов.
 - **General $N$-to-$M$ Positional Logic on OR Gates:**
   For $N$ inputs $X_0 \dots X_{N-1}$ and $M = \lceil\log_2 N\rceil$ output bits $Y_0 \dots Y_{M-1}$:
   $$\text{Input } X_i \text{ connects to OR gate } Y_k \iff ((i \gg k) \ \& \ 1) == 1$$
@@ -258,9 +270,10 @@ Flip-Flop bodies are 40x40. Outputs $Q$ and $\overline{Q}$ are on the right edge
 - **Symptom:** Logisim renders labels directly on the gate symbol. Schematics look cluttered and violate academic formatting rules.
 - **Strict Rule:** **Only input pins and output pins may carry labels.** All logic gates and flip-flops must have `label=""`.
 
-### 6.5 Pitfall 5: Top-to-Bottom Matrix Layout vs Crowded Arrays (Топология «Иксы сверху»)
-- **Problem:** Arranging 20 input pins horizontally with $\le 20$ px pitch causes severe label collisions (e.g. `X18` and `X19` overlapping into an unreadable blob).
-- **Strict Rule:** When placing pins along the top, use **$\Delta X = 40$ px pitch**, set `facing="south"`, and set `labelloc="north"`. This gives each pin 40 px of clean horizontal space, keeping all labels perfectly legible.
+### 6.5 Pitfall 5: Layout Dogmatism & Over-Constraining (Ловушка жесткого хардкода компоновки)
+- **Problem:** Forcing every single circuit into the exact same rigid topology (e.g. demanding that inputs must always and everywhere be strictly on top or on the left). Different logical blocks in engineering and educational practice have established, recognizable appearances (e.g., decoders and adders flow left-to-right, matrix encoders flow top-to-right, control buses flow from bottom to top).
+- **Symptom:** Schematics look unnatural, monotonous, or conflict with how students and teachers were taught to read them in standard textbooks and lab manuals.
+- **Strict Rule:** **Do not dogmatically hardcode pin or bus positions.** Structure the schematic so it mirrors the canonical diagram from authoritative engineering sources, while strictly preserving core quality invariants: zero dangling wire stubs, zero feedback loop collisions, clean 10px snapping, and unlabeled internal gates.
 
 ---
 
