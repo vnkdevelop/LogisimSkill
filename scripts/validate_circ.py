@@ -125,13 +125,19 @@ def validate_circ(filepath: str, logisim_jar: Optional[str] = None) -> bool:
         try:
             with open(v_java, "w", encoding="utf-8") as vf:
                 vf.write(test_script)
-            c_res = subprocess.run(["javac", "-cp", logisim_jar, v_java], capture_output=True, text=True)
+            # Try compiling for Java 8 compatibility (matching system JRE)
+            c_res = subprocess.run(["javac", "--release", "8", "-cp", logisim_jar, v_java], capture_output=True, text=True)
+            if c_res.returncode != 0:
+                # Fallback to standard javac
+                c_res = subprocess.run(["javac", "-cp", logisim_jar, v_java], capture_output=True, text=True)
             if c_res.returncode == 0:
                 r_res = subprocess.run(["java", "-cp", f"{logisim_jar};{temp_dir}", "VerifyLoad", filepath], capture_output=True, text=True)
                 if "LOGISIM_ENGINE_LOAD_OK" in r_res.stdout:
                     print("[+] Logisim engine loaded circuit successfully!")
                 else:
                     errors.append(f"Logisim engine failed to load: {r_res.stderr or r_res.stdout}")
+            else:
+                warnings.append(f"javac compilation failed: {c_res.stderr}")
         except Exception as ex:
             warnings.append(f"Logisim JAR engine test skipped: {ex}")
         finally:

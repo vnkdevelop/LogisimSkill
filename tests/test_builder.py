@@ -15,7 +15,11 @@ from logisim_builder import (
     Project, Pin, AndGate, OrGate, NotGate, XorGate, DFlipFlop,
     Coordinate, Wire,
     build_decoder_2to4, build_encoder_8to3, build_encoder_10to4_bcd,
-    build_matrix_encoder, build_multiplexer_4to1, build_demultiplexer_1to4
+    build_matrix_encoder, build_multiplexer_4to1, build_multiplexer_8to1,
+    build_demultiplexer_1to4, build_demultiplexer_1to8,
+    build_half_adder, build_full_adder, build_half_subtractor,
+    build_comparator_1bit, build_rs_latch, build_shift_register_4bit,
+    build_async_counter_4bit
 )
 from validate_circ import validate_circ
 from inspect_circ import inspect_circuit
@@ -164,6 +168,30 @@ class TestLogisimBuilder(unittest.TestCase):
                 r = inspect_circuit(fpath, strict=True)
                 self.assertTrue(r.passed, f"{fname} inspection failed: {r.errors}")
                 self.assertEqual(len(r.tangential_violations), 0, f"{fname} has tangential wire violations: {r.tangential_violations}")
+
+    def test_universal_builders_suite(self):
+        """Verifies that all newly added universal builders generate 100% compliant circuits."""
+        proj = Project(name="main")
+        build_half_adder(proj, name="Half_Adder")
+        build_full_adder(proj, name="Full_Adder")
+        build_half_subtractor(proj, name="Half_Subtractor")
+        build_comparator_1bit(proj, name="Comparator_1Bit")
+        build_rs_latch(proj, name="RS_Latch")
+        build_shift_register_4bit(proj, name="Shift_Register_4Bit")
+        build_async_counter_4bit(proj, name="Async_Counter_4Bit")
+        build_demultiplexer_1to8(proj, name="Demux_1to8", with_enable=True)
+        build_multiplexer_8to1(proj, name="Mux_8to1", with_enable=True)
+
+        out_path = os.path.join(self.examples_dir, "universal_suite.circ")
+        proj.save(out_path)
+
+        # Validate with inspect_circ
+        r = inspect_circuit(out_path, strict=True)
+        self.assertTrue(r.passed, f"Universal suite inspection failed: {r.errors}")
+        self.assertEqual(len(r.dangling_endpoints), 0, "No dangling endpoints in universal suite")
+
+        # Validate with validate_circ (including Java engine)
+        self.assertTrue(validate_circ(out_path, self.logisim_jar if os.path.exists(self.logisim_jar) else None))
 
 
 if __name__ == "__main__":

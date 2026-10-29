@@ -1417,10 +1417,392 @@ def build_demultiplexer_1to8(project: Project, name: str = "main", with_enable: 
 
     y_and = [100 + i * 50 for i in range(8)]
     and_inputs = 5 if with_enable else 4
+    in_x = 410
 
     for i in range(8):
         ag = c.add(AndGate(460, y_and[i], inputs=and_inputs, size=50))
         yp = c.add(Pin(540, y_and[i], label=f"Y{i}", facing="west", output=True, labelloc="east"))
         c.connect(ag, "out", yp, "pin")
 
+    # DI bus (in0 at yg - 20)
+    c.wire(di.get_port("pin"), (100, 60))
+    di_ys = [60] + [yg - 20 for yg in y_and]
+    c.add_vbus(100, di_ys)
+    for yg in y_and:
+        c.wire((100, yg - 20), (in_x, yg - 20))
+
+    # Enable bus (in4 at yg + 20)
+    if with_enable and e_pin:
+        c.wire(e_pin.get_port("pin"), (110, 500))
+        e_ys = [500] + [yg + 20 for yg in y_and]
+        c.add_vbus(110, e_ys)
+        for yg in y_and:
+            c.wire((110, yg + 20), (in_x, yg + 20))
+
+    # A2 inverters & buses (in1 at yg - 10)
+    c.wire(not2.get_port("out"), (260, 680))
+    c.add_vbus(260, [680] + [y_and[i] - 10 for i in range(4)])
+    for i in range(4):
+        c.wire((260, y_and[i] - 10), (in_x, y_and[i] - 10))
+    c.add_vbus(160, [660] + [y_and[i] - 10 for i in range(4, 8)])
+    for i in range(4, 8):
+        c.wire((160, y_and[i] - 10), (in_x, y_and[i] - 10))
+
+    # A1 inverters & buses (in2 at yg if with_enable else yg + 10)
+    a1_dy = 0 if with_enable else 10
+    c.wire(not1.get_port("out"), (240, 630))
+    c.add_vbus(240, [630] + [y_and[i] + a1_dy for i in [0, 1, 4, 5]])
+    for i in [0, 1, 4, 5]:
+        c.wire((240, y_and[i] + a1_dy), (in_x, y_and[i] + a1_dy))
+    c.add_vbus(140, [610] + [y_and[i] + a1_dy for i in [2, 3, 6, 7]])
+    for i in [2, 3, 6, 7]:
+        c.wire((140, y_and[i] + a1_dy), (in_x, y_and[i] + a1_dy))
+
+    # A0 inverters & buses (in3 at yg + 10 if with_enable else yg + 20)
+    a0_dy = 10 if with_enable else 20
+    c.wire(not0.get_port("out"), (220, 580))
+    c.add_vbus(220, [580] + [y_and[i] + a0_dy for i in [0, 2, 4, 6]])
+    for i in [0, 2, 4, 6]:
+        c.wire((220, y_and[i] + a0_dy), (in_x, y_and[i] + a0_dy))
+    c.add_vbus(120, [560] + [y_and[i] + a0_dy for i in [1, 3, 5, 7]])
+    for i in [1, 3, 5, 7]:
+        c.wire((120, y_and[i] + a0_dy), (in_x, y_and[i] + a0_dy))
+
     return c
+
+
+def build_half_adder(project: Project, name: str = "main") -> Circuit:
+    """
+    Builds a canonical 1-bit Half Adder.
+    Logic:
+      S = A ^ B
+      C = A & B
+    """
+    c = project.get_or_create_circuit(name)
+
+    a = c.add(Pin(80, 100, label="A", labelloc="west"))
+    b = c.add(Pin(80, 180, label="B", labelloc="west"))
+
+    xor_gate = c.add(XorGate(240, 100, size=50))
+    and_gate = c.add(AndGate(240, 200, size=50))
+
+    s_pin = c.add(Pin(320, 100, label="S", facing="west", output=True, labelloc="east"))
+    c_pin = c.add(Pin(320, 200, label="C", facing="west", output=True, labelloc="east"))
+
+    c.connect(xor_gate, "out", s_pin, "pin")
+    c.connect(and_gate, "out", c_pin, "pin")
+
+    # A bus at X=120
+    c.wire(a.get_port("pin"), (120, 100))
+    c.add_vbus(120, [100, 80, 180])
+    c.wire((120, 80), (180, 80))   # xor in0 (offset -60, -20)
+    c.wire((120, 180), (190, 180)) # and in0 (offset -50, -20)
+
+    # B bus at X=140
+    c.wire(b.get_port("pin"), (140, 180))
+    c.add_vbus(140, [180, 120, 220])
+    c.wire((140, 120), (180, 120)) # xor in1 (offset -60, +20)
+    c.wire((140, 220), (190, 220)) # and in1 (offset -50, +20)
+
+    return c
+
+
+def build_full_adder(project: Project, name: str = "main") -> Circuit:
+    """
+    Builds a canonical 1-bit Full Adder.
+    Logic:
+      P = A ^ B
+      S = P ^ Cin
+      Cout = (A & B) | (P & Cin)
+    """
+    c = project.get_or_create_circuit(name)
+
+    a = c.add(Pin(80, 100, label="A", labelloc="west"))
+    b = c.add(Pin(80, 180, label="B", labelloc="west"))
+    cin = c.add(Pin(80, 260, label="Cin", labelloc="west"))
+
+    # Stage 1: Half adder on A, B
+    xor1 = c.add(XorGate(240, 100, size=50))
+    and1 = c.add(AndGate(240, 200, size=50))
+
+    # A bus at X=120
+    c.wire(a.get_port("pin"), (120, 100))
+    c.add_vbus(120, [100, 80, 180])
+    c.wire((120, 80), (180, 80))
+    c.wire((120, 180), (190, 180))
+
+    # B bus at X=140
+    c.wire(b.get_port("pin"), (140, 180))
+    c.add_vbus(140, [180, 120, 220])
+    c.wire((140, 120), (180, 120))
+    c.wire((140, 220), (190, 220))
+
+    # Stage 2: XOR with Cin for Sum, AND with Cin for propagate carry
+    xor2 = c.add(XorGate(400, 120, size=50))
+    and2 = c.add(AndGate(400, 260, size=50))
+
+    # Connect XOR1 out to XOR2 in0 and AND2 in0 via bus at X=280
+    c.wire(xor1.get_port("out"), (280, 100))
+    c.add_vbus(280, [100, 240])
+    c.wire((280, 100), (340, 100)) # xor2 in0
+    c.wire((280, 240), (350, 240)) # and2 in0
+
+    # Cin bus at X=160
+    c.wire(cin.get_port("pin"), (160, 260))
+    c.add_vbus(160, [260, 140, 280])
+    c.wire((160, 140), (340, 140)) # xor2 in1
+    c.wire((160, 280), (350, 280)) # and2 in1
+
+    # Stage 3: OR gate combining generation carry (and1) and propagate carry (and2)
+    or_gate = c.add(OrGate(520, 230, size=50))
+    c.wire(and1.get_port("out"), (440, 200))
+    c.wire((440, 200), (440, 210))
+    c.wire((440, 210), (470, 210)) # or in0
+
+    c.wire(and2.get_port("out"), (440, 260))
+    c.wire((440, 260), (440, 250))
+    c.wire((440, 250), (470, 250)) # or in1
+
+    # Outputs
+    s_pin = c.add(Pin(580, 120, label="S", facing="west", output=True, labelloc="east"))
+    cout_pin = c.add(Pin(580, 230, label="Cout", facing="west", output=True, labelloc="east"))
+    c.connect(xor2, "out", s_pin, "pin")
+    c.connect(or_gate, "out", cout_pin, "pin")
+
+    return c
+
+
+def build_half_subtractor(project: Project, name: str = "main") -> Circuit:
+    """
+    Builds a canonical 1-bit Half Subtractor.
+    Logic:
+      D = A ^ B
+      Bout = !A & B
+    """
+    c = project.get_or_create_circuit(name)
+
+    a = c.add(Pin(80, 100, label="A", labelloc="west"))
+    b = c.add(Pin(80, 180, label="B", labelloc="west"))
+
+    xor_gate = c.add(XorGate(260, 100, size=50))
+    not_gate = c.add(NotGate(180, 180, size=30))
+    and_gate = c.add(AndGate(260, 200, size=50))
+
+    d_pin = c.add(Pin(340, 100, label="D", facing="west", output=True, labelloc="east"))
+    bout_pin = c.add(Pin(340, 200, label="Bout", facing="west", output=True, labelloc="east"))
+
+    c.connect(xor_gate, "out", d_pin, "pin")
+    c.connect(and_gate, "out", bout_pin, "pin")
+
+    # A bus at X=120
+    c.wire(a.get_port("pin"), (120, 100))
+    c.add_vbus(120, [100, 80, 180])
+    c.wire((120, 80), (200, 80)) # xor in0
+    c.wire((120, 180), not_gate.get_port("in"))
+
+    # Connect NOT out to AND in0
+    c.wire(not_gate.get_port("out"), (210, 180)) # and in0
+
+    # B bus at X=140
+    c.wire(b.get_port("pin"), (140, 180))
+    c.add_vbus(140, [180, 120, 220])
+    c.wire((140, 120), (200, 120)) # xor in1
+    c.wire((140, 220), (210, 220)) # and in1
+
+    return c
+
+
+def build_comparator_1bit(project: Project, name: str = "main") -> Circuit:
+    """
+    Builds a 1-bit Comparator.
+    Logic:
+      GT (A > B) = A & !B
+      EQ (A = B) = !(A ^ B) (XNOR)
+      LT (A < B) = !A & B
+    """
+    c = project.get_or_create_circuit(name)
+
+    a = c.add(Pin(80, 100, label="A", labelloc="west"))
+    b = c.add(Pin(80, 220, label="B", labelloc="west"))
+
+    not_a = c.add(NotGate(180, 140, size=30))
+    not_b = c.add(NotGate(180, 260, size=30))
+
+    gt_gate = c.add(AndGate(320, 100, size=50))
+    eq_gate = c.add(XnorGate(320, 180, size=50))
+    lt_gate = c.add(AndGate(320, 260, size=50))
+
+    gt_pin = c.add(Pin(400, 100, label="GT", facing="west", output=True, labelloc="east"))
+    eq_pin = c.add(Pin(400, 180, label="EQ", facing="west", output=True, labelloc="east"))
+    lt_pin = c.add(Pin(400, 260, label="LT", facing="west", output=True, labelloc="east"))
+
+    c.connect(gt_gate, "out", gt_pin, "pin")
+    c.connect(eq_gate, "out", eq_pin, "pin")
+    c.connect(lt_gate, "out", lt_pin, "pin")
+
+    # A bus at X=120
+    c.wire(a.get_port("pin"), (120, 100))
+    c.add_vbus(120, [100, 80, 140, 160])
+    c.wire((120, 80), (270, 80))   # gt in0
+    c.wire((120, 140), not_a.get_port("in"))
+    c.wire((120, 160), (250, 160)) # eq in0 (XNOR offset -70, -20)
+
+    # B bus at X=140
+    c.wire(b.get_port("pin"), (140, 220))
+    c.add_vbus(140, [220, 200, 260, 280])
+    c.wire((140, 200), (250, 200)) # eq in1 (XNOR offset -70, +20)
+    c.wire((140, 260), not_b.get_port("in"))
+    c.wire((140, 280), (270, 280)) # lt in1
+
+    # !B to gt in1
+    c.wire(not_b.get_port("out"), (220, 260))
+    c.wire((220, 260), (220, 120))
+    c.wire((220, 120), (270, 120)) # gt in1
+
+    # !A to lt in0
+    c.wire(not_a.get_port("out"), (240, 140))
+    c.wire((240, 140), (240, 240))
+    c.wire((240, 240), (270, 240)) # lt in0
+
+    return c
+
+
+def build_rs_latch(project: Project, name: str = "main") -> Circuit:
+    """
+    Builds a classic cross-coupled NOR RS Latch.
+    Logic:
+      Q = !(R | NotQ)
+      NotQ = !(S | Q)
+    """
+    c = project.get_or_create_circuit(name)
+
+    r = c.add(Pin(80, 100, label="R", labelloc="west"))
+    s = c.add(Pin(80, 240, label="S", labelloc="west"))
+
+    nor_top = c.add(NorGate(260, 120, size=50))
+    nor_bot = c.add(NorGate(260, 220, size=50))
+
+    q_pin = c.add(Pin(360, 120, label="Q", facing="west", output=True, labelloc="east"))
+    notq_pin = c.add(Pin(360, 220, label="NotQ", facing="west", output=True, labelloc="east"))
+
+    c.connect(nor_top, "out", q_pin, "pin")
+    c.connect(nor_bot, "out", notq_pin, "pin")
+
+    # Connect R to top NOR in0 (offset -60, -20 -> Y=100)
+    c.wire(r.get_port("pin"), (200, 100))
+
+    # Connect S to bot NOR in1 (offset -60, +20 -> Y=240)
+    c.wire(s.get_port("pin"), (200, 240))
+
+    # Cross feedback:
+    # Q at (260, 120) -> tap at X=300 -> route to bot NOR in0 (offset -60, -20 -> Y=200)
+    c.wire((300, 120), (300, 170))
+    c.wire((300, 170), (180, 170))
+    c.wire((180, 170), (180, 200))
+    c.wire((180, 200), (200, 200))
+
+    # NotQ at (260, 220) -> tap at X=320 -> route to top NOR in1 (offset -60, +20 -> Y=140)
+    c.wire((320, 220), (320, 180))
+    c.wire((320, 180), (160, 180))
+    c.wire((160, 180), (160, 140))
+    c.wire((160, 140), (200, 140))
+
+    return c
+
+
+def build_d_flip_flop_divider(project: Project, name: str = "main") -> Circuit:
+    """
+    Builds a frequency divider using a D Flip-Flop with inverted feedback (!Q -> D).
+    """
+    c = project.get_or_create_circuit(name)
+
+    clk = c.add(Clock(100, 160))
+    dff = c.add(DFlipFlop(220, 140))
+    q_out = c.add(Pin(300, 140, label="Q", facing="west", output=True, labelloc="east"))
+
+    c.connect(clk, "out", dff, "clock")
+    c.connect(dff, "q", q_out, "pin")
+
+    # Route !Q (220, 160) back to D (180, 140) around the top
+    c.wire((220, 160), (250, 160))
+    c.wire((250, 160), (250, 90))
+    c.wire((250, 90), (150, 90))
+    c.wire((150, 90), (150, 140))
+    c.wire((150, 140), (180, 140))
+
+    return c
+
+
+def build_shift_register_4bit(project: Project, name: str = "main") -> Circuit:
+    """
+    Builds a 4-bit Serial-In Parallel-Out (SIPO) Shift Register using D Flip-Flops.
+    """
+    c = project.get_or_create_circuit(name)
+
+    din = c.add(Pin(80, 140, label="Din", labelloc="west"))
+    clk = c.add(Clock(80, 220))
+
+    ff_xs = [200, 320, 440, 560]
+    ffs = []
+    for i, x in enumerate(ff_xs):
+        ff = c.add(DFlipFlop(x, 140))
+        ffs.append(ff)
+        q_pin = c.add(Pin(x + 50, 90, label=f"Q{i}", facing="south", output=True, labelloc="north"))
+        c.wire((x, 140), (x + 50, 140))
+        c.wire((x + 50, 140), (x + 50, 90))
+
+    # Connect Din to FF0 D input
+    c.wire(din.get_port("pin"), (160, 140))
+
+    # Cascade FF outputs to next inputs: Q[i] -> D[i+1]
+    for i in range(3):
+        x_curr = ff_xs[i]
+        x_next = ff_xs[i + 1]
+        c.wire((x_curr + 50, 140), (x_next - 40, 140))
+
+    # Common Clock bus at Y=220
+    c.wire(clk.get_port("out"), (ff_xs[-1] - 40, 220))
+    for x in ff_xs:
+        c.wire((x - 40, 220), (x - 40, 160))
+
+    return c
+
+
+def build_async_counter_4bit(project: Project, name: str = "main") -> Circuit:
+    """
+    Builds a 4-bit Asynchronous (Ripple) Binary Up-Counter using D Flip-Flops.
+    Each flip-flop is in toggle mode (!Q -> D).
+    Clock of stage i+1 is driven by !Q of stage i (for active-rising D-FFs).
+    """
+    c = project.get_or_create_circuit(name)
+
+    clk = c.add(Clock(80, 160))
+    ff_xs = [200, 340, 480, 620]
+    ffs = []
+
+    for i, x in enumerate(ff_xs):
+        ff = c.add(DFlipFlop(x, 140))
+        ffs.append(ff)
+        # Q output pin
+        q_pin = c.add(Pin(x + 40, 80, label=f"Q{i}", facing="south", output=True, labelloc="north"))
+        c.wire((x, 140), (x + 40, 140))
+        c.wire((x + 40, 140), (x + 40, 80))
+
+        # Inverted feedback !Q (x, 160) -> D (x - 40, 140)
+        c.wire((x, 160), (x + 20, 160))
+        c.wire((x + 20, 160), (x + 20, 110))
+        c.wire((x + 20, 110), (x - 60, 110))
+        c.wire((x - 60, 110), (x - 60, 140))
+        c.wire((x - 60, 140), (x - 40, 140))
+
+    # Stage 0 clock
+    c.wire(clk.get_port("out"), (ff_xs[0] - 40, 160))
+
+    # Ripple clock: !Q[i] clocks FF[i+1]
+    for i in range(3):
+        x_curr = ff_xs[i]
+        x_next = ff_xs[i + 1]
+        c.wire((x_curr + 20, 160), (x_next - 40, 160))
+
+    return c
+
