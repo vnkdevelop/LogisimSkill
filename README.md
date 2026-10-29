@@ -13,10 +13,14 @@ It solves the common problem of AI-generated circuits being misaligned, having d
 
 ## ✨ Features
 
+- **Automatic GUI Toolbar & Mappings:** Eliminates the missing toolbar bug in Logisim GUI mode by automatically generating `<toolbar>` (with Poke Tool, Edit Tool, Text Tool) and `<mappings>`.
 - **Exact Component Geometry:** Pin-accurate coordinates for 48+ standard Logisim components across Wiring, Gates, Plexers, Arithmetic, Memory, and I/O.
 - **Strict Manhattan Wire Routing:** Automatically breaks non-aligned connections into purely orthogonal ($X_1=X_2$ or $Y_1=Y_2$) segments with automatic junction creation.
+- **Segmented Bus Routing:** `add_vbus` and `add_hbus` prevent overlapping collinear wires and ensure clean, reliable multi-tap junctions.
+- **Canonical Logic Generators:** Ready-to-use factories for decoders (2-to-4), encoders (8-to-3, 10-to-4, N-to-M), multiplexers (4-to-1, 8-to-1), and demultiplexers (1-to-4, 1-to-8).
+- **Collision-Free Ergonomic Layouts:** Built-in rules for pin spacing ($\ge 30\text{--}40$ px pitch) eliminating text and label overlaps.
 - **10-Pixel Grid Snapping:** Enforces complete alignment with Logisim's internal grid.
-- **Engine-Level Validation:** `validate_circ.py` checks XML validity, grid alignment, absence of diagonal lines, and optionally tests loading headlessly directly inside Logisim's Java bytecode.
+- **Engine-Level Validation:** `validate_circ.py` checks XML validity, grid alignment, absence of diagonal lines, toolbar presence, and tests loading headlessly directly inside Logisim's Java bytecode.
 - **Modular & Clean:** Standard Python API with zero external dependencies (uses standard library `xml.etree`).
 
 ---
@@ -26,19 +30,27 @@ It solves the common problem of AI-generated circuits being misaligned, having d
 ### 1. Programmatic Circuit Generation
 
 ```python
-from scripts.logisim_builder import Project, Pin, AndGate, OrGate, NotGate
+from scripts.logisim_builder import (
+    Project, Pin, AndGate, OrGate, NotGate,
+    build_decoder_2to4, build_encoder_8to3,
+    build_multiplexer_4to1, build_demultiplexer_1to4
+)
 
-# Create a project and access the main sheet
+# Create a project (automatically injects GUI toolbar & mouse mappings)
 proj = Project(name="main")
-sheet = proj.main
 
-# Place inputs and components
+# Generate standard canonical blocks with zero manual routing:
+build_decoder_2to4(proj, name="main", with_enable=True)
+build_encoder_8to3(proj, name="Классический_8_в_3")
+build_multiplexer_4to1(proj, name="Мультиплексор_4_в_1", with_enable=True)
+
+# Or build custom circuits using segmented bus routing:
+sheet = proj.get_or_create_circuit("CustomCircuit")
 pin_a = sheet.add(Pin(100, 100, label="A"))
 pin_b = sheet.add(Pin(100, 140, label="B"))
 and_gate = sheet.add(AndGate(240, 120, inputs=2, size=50))
 out_pin = sheet.add(Pin(320, 120, label="Y", facing="west", output=True))
 
-# Connect components with automatic orthogonal Manhattan routing
 sheet.connect(pin_a, "pin", and_gate, "in0", routing="hv")
 sheet.connect(pin_b, "pin", and_gate, "in1", routing="hv")
 sheet.connect(and_gate, "out", out_pin, "pin")

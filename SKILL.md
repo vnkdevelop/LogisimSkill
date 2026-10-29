@@ -5,47 +5,105 @@ description: "Author, design, and validate pixel-perfect digital logic circuit f
 
 # Logisim Circuit Architect Skill
 
-A complete engineering specification and workflow for generating 100% compliant, pixel-perfect `.circ` circuit files that open natively in **Logisim 2.7.1** and **Logisim-evolution** with zero graphical glitches, zero disconnects, and immediate simulation readiness.
+A complete engineering specification and workflow for generating 100% compliant, pixel-perfect `.circ` circuit files that open natively in **Logisim 2.7.1** and **Logisim-evolution** with zero graphical glitches, full GUI toolbar interactivity, zero disconnects, and immediate simulation readiness.
 
 ---
 
-## 1. Fundamental Rules of the Logisim Engine
+## 1. Zero-Exploration Generation Protocol (No Scratch Scripts Needed)
 
-Logisim stores digital circuits as XML files (`.circ`). Unlike hardware description languages (VHDL/Verilog) or netlist-based CAD tools (SPICE), Logisim determines electrical connectivity **purely through geometry**:
+When tasked with generating a Logisim schematic, **never create temporary discovery scripts or trial-and-error tests**. All component pin offsets, gate geometries, bus distribution methods, and canonical circuit topologies are exhaustively documented in this skill and implemented in `scripts/logisim_builder.py`.
 
-1. **Strict 10-Pixel Grid Alignment:**
-   - Every component anchor `loc="(X,Y)"` and every wire endpoint `from="(X1,Y1)" to="(X2,Y2)"` **must be an integer multiple of 10**.
-   - Placements that do not align to the 10px grid cause visual misalignment and fail to snap to pins.
-
-2. **Strict Manhattan Orthogonal Routing:**
-   - Logisim **only supports horizontal and vertical wire segments**:
-     - Horizontal: $Y_1 = Y_2$
-     - Vertical: $X_1 = X_2$
-   - **Diagonal wires are strictly forbidden.** Connecting two points $(X_1, Y_1)$ and $(X_2, Y_2)$ with different $X$ and $Y$ requires at least two orthogonal segments through a corner point $(X_2, Y_1)$ or $(X_1, Y_2)$.
-
-3. **Implicit Junction Creation:**
-   - An electrical connection (junction) is formed **only** when a wire endpoint lands on:
-     - An exact pin coordinate of a component.
-     - An endpoint or collinear coordinate of another wire.
-   - If a wire misses a pin coordinate by even 10 pixels, no connection occurs and the simulation will display blue/red error lines (`Unknown` or `Error`).
-
-4. **Standard Library Indices:**
-   A standard Logisim `.circ` file declares libraries at the root `<project>`:
-   - `lib="0"`: `#Wiring` (Pin, Splitter, Probe, Tunnel, Clock, Constant, Power, Ground)
-   - `lib="1"`: `#Gates` (AND, OR, NAND, NOR, XOR, XNOR, NOT, Buffer, Controlled Buffer)
-   - `lib="2"`: `#Plexers` (Multiplexer, Demultiplexer, Decoder, Priority Encoder)
-   - `lib="3"`: `#Arithmetic` (Adder, Subtractor, Multiplier, Divider, Comparator, Shifter)
-   - `lib="4"`: `#Memory` (D/T/JK/SR Flip-Flops, Register, Counter, Shift Register, RAM, ROM)
-   - `lib="5"`: `#I/O` (Button, LED, 7-Segment Display, Hex Display, Keyboard, TTY)
-   - `lib="6"`: `#Base` (Text Tool, Poke Tool, Edit Tool)
+You can immediately generate final `.circ` files using either:
+1. **The Python Builder API** (`from scripts.logisim_builder import Project, Pin, AndGate, OrGate, ...`).
+2. **Pre-built Canonical Generators** (`build_decoder_2to4`, `build_encoder_n_to_m`, `build_multiplexer_8to1`, `build_demultiplexer_1to8`).
+3. **Direct XML synthesis** following the exact schemas and templates provided below.
 
 ---
 
-## 2. Ground-Truth Component Pin Geometry
+## 2. Mandatory GUI Toolbar & Mouse Mappings
+
+### 2.1 The Missing Toolbar Bug
+When Logisim loads a `.circ` file that lacks `<toolbar>` and `<mappings>` elements inside the root `<project>`, it initializes in a **stripped/headless view mode**:
+- The top toolbar is completely absent.
+- The **Poke Tool** (Hand tool `lib="6" name="Poke Tool"`), **Edit Tool** (Selection arrow), and **Text Tool** disappear.
+- The user is unable to click input pins, toggle signals, or interact with the simulation.
+
+### 2.2 Mandatory XML Block
+Every generated `.circ` file **must** include the following blocks directly after `<options>` in the `<project>` tag:
+
+```xml
+  <mappings>
+    <tool lib="6" map="Button2" name="Menu Tool"/>
+    <tool lib="6" map="Button3" name="Menu Tool"/>
+    <tool lib="6" map="Ctrl Button1" name="Menu Tool"/>
+  </mappings>
+  <toolbar>
+    <tool lib="6" name="Poke Tool"/>
+    <tool lib="6" name="Edit Tool"/>
+    <tool lib="6" name="Text Tool">
+      <a name="text" val=""/>
+      <a name="font" val="SansSerif plain 12"/>
+      <a name="halign" val="center"/>
+      <a name="valign" val="base"/>
+    </tool>
+    <sep/>
+    <tool lib="0" name="Pin">
+      <a name="tristate" val="false"/>
+    </tool>
+    <tool lib="0" name="Pin">
+      <a name="facing" val="west"/>
+      <a name="output" val="true"/>
+      <a name="labelloc" val="east"/>
+    </tool>
+    <tool lib="1" name="NOT Gate"/>
+    <tool lib="1" name="AND Gate"/>
+    <tool lib="1" name="OR Gate"/>
+  </toolbar>
+```
+
+> [!NOTE]
+> `Project.to_xml_string()` and `Project.save()` in `logisim_builder.py` automatically inject this entire block by default.
+
+---
+
+## 3. Ergonomic Layout & Wiring Principles
+
+### 3.1 Strict 10-Pixel Grid Alignment
+- Every component anchor `loc="(X,Y)"` and every wire endpoint `from="(X1,Y1)" to="(X2,Y2)"` **must be an integer multiple of 10**.
+- Odd coordinates (e.g. 15, 25, 175) corrupt pin alignment and cause floating unconnected wires.
+
+### 3.2 Manhattan Orthogonal Routing Only
+- Logisim **only supports horizontal and vertical wire segments**:
+  - Horizontal: $Y_1 = Y_2$
+  - Vertical: $X_1 = X_2$
+- **Diagonal wires are strictly forbidden.** Connecting two points $(X_1, Y_1)$ and $(X_2, Y_2)$ requires two orthogonal segments connected through a corner point $(X_2, Y_1)$ or $(X_1, Y_2)$.
+
+### 3.3 Pin Pitch & Label Clearance Rules
+- **Vertical Pin Arrays:** Place pins vertically on the left with a pitch of **$\ge 30\text{--}40$ px** (e.g., $Y = 100, 130, 160, 190 \dots$).
+- **Label Orientation:**
+  - Left-hand inputs: `facing="east"`, `labelloc="west"`.
+  - Right-hand outputs: `facing="west"`, `output="true"`, `labelloc="east"`.
+- **Horizontal Pin Warning:** Placing pins horizontally side-by-side with $\le 20$ px pitch causes severe label collisions (e.g. "X18" and "X19" overlapping). Always maintain $\ge 40$ px if horizontal placement is unavoidable, but prefer vertical arrays for multi-bit inputs.
+
+### 3.4 Segmented Bus Routing (`add_vbus` and `add_hbus`)
+- When tapping a bus line at multiple points, **never draw a single continuous wire across all taps**. In Logisim, overlapping collinear wire segments can cause phantom shorts or failing T-junctions.
+- Always use segmented lines between consecutive tap coordinates:
+  - For vertical bus at $X$ with taps at $Y_0, Y_1, Y_2$: create wire $(X, Y_0) \to (X, Y_1)$ and wire $(X, Y_1) \to (X, Y_2)$.
+  - Helper methods `c.add_vbus(x, [y0, y1, y2])` and `c.add_hbus(y, [x0, x1, x2])` automatically sort coordinates and create clean point-to-point subsegments.
+
+### 3.5 Multi-Circuit Architecture
+- In academic laboratory assignments and modular designs:
+  - Put the specific assigned variant in the `main` circuit.
+  - Put standard classical reference designs (e.g., `Классический_8_в_3`, `Дешифратор_2_в_4_без_E`) as additional named subcircuits in the same `.circ` file.
+  - This allows instructors and students to inspect both the textbook base circuit and the assigned variant in a single file.
+
+---
+
+## 4. Ground-Truth Component Pin Geometry
 
 For a component placed at anchor `loc="(X,Y)"`, its pin positions are calculated as `(X + dx, Y + dy)`.
 
-### 2.1 Wiring (`lib="0"`)
+### 4.1 Wiring (`lib="0"`)
 | Component | Default Attributes | Pin Name | dx | dy | Direction |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Pin (Input)** | `facing="east"`, `output="false"` | `pin` | `0` | `0` | Output to circuit |
@@ -59,103 +117,147 @@ For a component placed at anchor `loc="(X,Y)"`, its pin positions are calculated
 
 ---
 
-### 2.2 Logic Gates (`lib="1"`)
+### 4.2 Logic Gates (`lib="1"`)
 Gates facing `east` have their output at `(0, 0)` relative to `loc`.
 
 #### Standard Size (`size="50"`, medium):
-| Gate | Inputs | Input 0 (`in0`) | Input 1 (`in1`) | Input 2 (`in2`) | Output (`out`) |
-| :--- | :---: | :---: | :---: | :---: | :---: |
-| **AND Gate** | 2 | `(-50, -20)` | `(-50, 20)` | — | `(0, 0)` |
-| **AND Gate** | 3 | `(-50, -20)` | `(-50, 0)` | `(-50, 20)` | `(0, 0)` |
-| **OR Gate** | 2 | `(-50, -20)` | `(-50, 20)` | — | `(0, 0)` |
-| **OR Gate** | 3 | `(-50, -20)` | `(-50, 0)` | `(-50, 20)` | `(0, 0)` |
-| **NAND Gate** | 2 | `(-60, -20)` | `(-60, 20)` | — | `(0, 0)` |
-| **NOR Gate** | 2 | `(-60, -20)` | `(-60, 20)` | — | `(0, 0)` |
-| **XOR Gate** | 2 | `(-60, -20)` | `(-60, 20)` | — | `(0, 0)` |
-| **XNOR Gate** | 2 | `(-70, -20)` | `(-70, 20)` | — | `(0, 0)` |
+| Gate | Inputs | Input Pin Offsets `(dx, dy)` |
+| :--- | :---: | :--- |
+| **AND Gate** | 2 | `in0: (-50, -20)`, `in1: (-50, 20)` |
+| **AND Gate** | 3 | `in0: (-50, -20)`, `in1: (-50, 0)`, `in2: (-50, 20)` |
+| **AND Gate** | 4 | `in0: (-50, -20)`, `in1: (-50, -10)`, `in2: (-50, 10)`, `in3: (-50, 20)` |
+| **AND Gate** | 5 | `in0: (-50, -20)`, `in1: (-50, -10)`, `in2: (-50, 0)`, `in3: (-50, 10)`, `in4: (-50, 20)` |
+| **AND Gate** | 8 | `(-50, -40)`, `(-50, -30)`, `(-50, -20)`, `(-50, -10)`, `(-50, 10)`, `(-50, 20)`, `(-50, 30)`, `(-50, 40)` |
+| **OR Gate** | 2 | `in0: (-50, -20)`, `in1: (-50, 20)` |
+| **OR Gate** | 3 | `in0: (-50, -20)`, `in1: (-50, 0)`, `in2: (-50, 20)` |
+| **OR Gate** | 4 | `in0: (-50, -20)`, `in1: (-50, -10)`, `in2: (-50, 10)`, `in3: (-50, 20)` |
+| **OR Gate** | 5 | `in0: (-50, -20)`, `in1: (-50, -10)`, `in2: (-50, 0)`, `in3: (-50, 10)`, `in4: (-50, 20)` |
+| **OR Gate** | 8 | `(-50, -40)`, `(-50, -30)`, `(-50, -20)`, `(-50, -10)`, `(-50, 10)`, `(-50, 20)`, `(-50, 30)`, `(-50, 40)` |
+| **NAND Gate** | 2 | `in0: (-60, -20)`, `in1: (-60, 20)` (bubble adds 10px width) |
+| **NOR Gate** | 2 | `in0: (-60, -20)`, `in1: (-60, 20)` |
+| **XOR Gate** | 2 | `in0: (-60, -20)`, `in1: (-60, 20)` |
 
 #### Narrow Size (`size="30"`):
-| Gate | Inputs | Input 0 (`in0`) | Input 1 (`in1`) | Output (`out`) |
-| :--- | :---: | :---: | :---: | :---: |
-| **AND Gate (Narrow)** | 2 | `(-30, -10)` | `(-30, 10)` | `(0, 0)` |
-| **OR Gate (Narrow)** | 2 | `(-30, -10)` | `(-30, 10)` | `(0, 0)` |
-| **NOT Gate** | 1 | `(-30, 0)` | — | `(0, 0)` |
-| **Buffer** | 1 | `(-20, 0)` | — | `(0, 0)` |
-| **Controlled Buffer** | 1 | `in: (-20, 0)` | `ctrl: (-10, 10)` | `(0, 0)` |
-| **Controlled Inverter**| 1 | `in: (-30, 0)` | `ctrl: (-20, 10)` | `(0, 0)` |
+| Gate | Inputs | Input Pin Offsets `(dx, dy)` | Output `(dx, dy)` |
+| :--- | :---: | :--- | :--- |
+| **AND Gate (Narrow)** | 2 | `in0: (-30, -10)`, `in1: (-30, 10)` | `(0, 0)` |
+| **OR Gate (Narrow)** | 2 | `in0: (-30, -10)`, `in1: (-30, 10)` | `(0, 0)` |
+| **NOT Gate** | 1 | `in: (-30, 0)` | `(0, 0)` |
+| **Buffer** | 1 | `in: (-20, 0)` | `(0, 0)` |
 
 ---
 
-### 2.3 Plexers (`lib="2"`)
-| Component | Select Bits | Pin Name | dx | dy | Function |
-| :--- | :---: | :--- | :---: | :---: | :--- |
-| **Multiplexer** | 1 (2-to-1) | `in0`<br>`in1`<br>`sel`<br>`enable`<br>`out` | `-30`<br>`-30`<br>`-20`<br>`-10`<br>`0` | `-10`<br>`10`<br>`20`<br>`20`<br>`0` | Input 0<br>Input 1<br>Select line<br>Enable line<br>Output |
-| **Demultiplexer** | 1 (1-to-2) | `in`<br>`out0`<br>`out1`<br>`sel`<br>`enable` | `0`<br>`30`<br>`30`<br>`20`<br>`10` | `0`<br>`-10`<br>`10`<br>`20`<br>`20` | Input<br>Output 0<br>Output 1<br>Select line<br>Enable line |
-| **Decoder** | 1 (1-to-2) | `sel`<br>`enable`<br>`out0`<br>`out1` | `0`<br>`-10`<br>`10`<br>`10` | `0`<br>`0`<br>`-30`<br>`-10` | Select input<br>Enable input<br>Active low/high 0<br>Active low/high 1 |
-
----
-
-### 2.4 Arithmetic (`lib="3"`)
-All arithmetic blocks have standardized 40x40 bodies with outputs on the right and inputs on the left:
-| Component | Pin Name | dx | dy | Description |
-| :--- | :--- | :---: | :---: | :--- |
-| **Adder** | `inA`<br>`inB`<br>`out`<br>`cin`<br>`cout` | `-40`<br>`-40`<br>`0`<br>`-20`<br>`-20` | `-10`<br>`10`<br>`0`<br>`-20`<br>`20` | Operand A<br>Operand B<br>Sum output<br>Carry In (top)<br>Carry Out (bottom) |
-| **Subtractor** | `inA`<br>`inB`<br>`out`<br>`bin`<br>`bout` | `-40`<br>`-40`<br>`0`<br>`-20`<br>`-20` | `-10`<br>`10`<br>`0`<br>`-20`<br>`20` | Minuend<br>Subtrahend<br>Difference output<br>Borrow In (top)<br>Borrow Out (bottom) |
-| **Comparator** | `inA`<br>`inB`<br>`gt`<br>`eq`<br>`lt` | `-40`<br>`-40`<br>`0`<br>`0`<br>`0` | `-10`<br>`10`<br>`-10`<br>`0`<br>`10` | Operand A<br>Operand B<br>A > B output<br>A = B output<br>A < B output |
-
----
-
-### 2.5 Memory / Sequential Elements (`lib="4"`)
+### 4.3 Memory / Sequential Elements (`lib="4"`)
 Flip-Flop bodies are 40x40. Outputs $Q$ and $\overline{Q}$ are on the right edge:
 | Component | Pin Name | dx | dy | Description |
 | :--- | :--- | :---: | :---: | :--- |
-| **D Flip-Flop** | `d`<br>`clock`<br>`q`<br>`notq`<br>`reset`<br>`preset`<br>`enable` | `-40`<br>`-40`<br>`0`<br>`0`<br>`-10`<br>`-30`<br>`-20` | `0`<br>`20`<br>`0`<br>`20`<br>`30`<br>`30`<br>`30` | Data input<br>Clock input<br>Normal output $Q$<br>Inverted output $\overline{Q}$<br>Async Clear (bottom right)<br>Async Preset (bottom left)<br>Clock Enable (bottom center) |
-| **T Flip-Flop** | `t`<br>`clock`<br>`q`<br>`notq` | `-40`<br>`-40`<br>`0`<br>`0` | `0`<br>`20`<br>`0`<br>`20` | Toggle input<br>Clock input<br>$Q$<br>$\overline{Q}$ |
-| **J-K Flip-Flop** | `j`<br>`clock`<br>`k`<br>`q`<br>`notq` | `-40`<br>`-40`<br>`-40`<br>`0`<br>`0` | `0`<br>`10`<br>`20`<br>`0`<br>`20` | J input<br>Clock input<br>K input<br>$Q$<br>$\overline{Q}$ |
-| **S-R Flip-Flop** | `s`<br>`clock`<br>`r`<br>`q`<br>`notq` | `-40`<br>`-40`<br>`-40`<br>`0`<br>`0` | `0`<br>`10`<br>`20`<br>`0`<br>`20` | Set input<br>Clock input<br>Reset input<br>$Q$<br>$\overline{Q}$ |
-| **Register** | `in`<br>`out`<br>`clock`<br>`clear`<br>`enable` | `-30`<br>`0`<br>`-20`<br>`-10`<br>`-30` | `0`<br>`0`<br>`20`<br>`20`<br>`10` | Parallel Data In (8-bit)<br>Parallel Data Out (8-bit)<br>Clock<br>Clear<br>Enable |
+| **D Flip-Flop** | `d`<br>`clock`<br>`q`<br>`notq`<br>`reset`<br>`preset`<br>`enable` | `-40`<br>`-40`<br>`0`<br>`0`<br>`-10`<br>`-30`<br>`-20` | `0`<br>`20`<br>`0`<br>`20`<br>`30`<br>`30`<br>`30` | Data input<br>Clock input<br>Normal output $Q$<br>Inverted output $\overline{Q}$<br>Async Clear<br>Async Preset<br>Clock Enable |
+| **Register** | `in`<br>`out`<br>`clock`<br>`clear`<br>`enable` | `-30`<br>`0`<br>`-20`<br>`-10`<br>`-30` | `0`<br>`0`<br>`20`<br>`20`<br>`10` | Parallel Data In<br>Parallel Data Out<br>Clock<br>Clear<br>Enable |
 | **Counter** | `out`<br>`in`<br>`clock`<br>`clear`<br>`load`<br>`count`<br>`carry` | `0`<br>`-30`<br>`-20`<br>`-10`<br>`-30`<br>`-30`<br>`0` | `0`<br>`0`<br>`20`<br>`20`<br>`-10`<br>`10`<br>`10` | Counter value out<br>Parallel load in<br>Clock<br>Clear<br>Load enable<br>Count enable<br>Carry output |
 
 ---
 
-## 3. High-Level Python Engine API
+## 5. Canonical Combinational Logic Topologies
 
-The skill includes a dedicated Python API in `scripts/logisim_builder.py` allowing instant programmatic schematic construction:
+### 5.1 Дешифратор (Binary Decoder 2-to-4)
+- **Boolean Functions:**
+  $$Y_0 = \overline{A_1} \cdot \overline{A_0} \cdot E$$
+  $$Y_1 = \overline{A_1} \cdot A_0 \cdot E$$
+  $$Y_2 = A_1 \cdot \overline{A_0} \cdot E$$
+  $$Y_3 = A_1 \cdot A_0 \cdot E$$
+- **Implementation:**
+  - 2 address inputs $A_0, A_1$, 1 enable input $E$ (strobe).
+  - 2 NOT gates for address inverting.
+  - 4 AND gates (3 inputs each with $E$, or 2 inputs without $E$).
+  - Vertical distribution buses for $E$ ($X=100$), $A_0$ ($X=120$), $A_1$ ($X=140$), $\overline{A_0}$ ($X=220$), $\overline{A_1}$ ($X=240$).
+  - Direct builder: `build_decoder_2to4(proj, name="main", with_enable=True)`.
 
+### 5.2 Шифратор (Binary & Positional Encoders)
+- **General $N$-to-$M$ Positional Logic on OR Gates:**
+  For $N$ inputs $X_0 \dots X_{N-1}$ and $M = \lceil\log_2 N\rceil$ output bits $Y_0 \dots Y_{M-1}$:
+  $$\text{Input } X_i \text{ connects to OR gate } Y_k \iff ((i \gg k) \ \& \ 1) == 1$$
+- **8-to-3 Octal Encoder:**
+  - $Y_0 = X_1 + X_3 + X_5 + X_7$ (4-input OR)
+  - $Y_1 = X_2 + X_3 + X_6 + X_7$ (4-input OR)
+  - $Y_2 = X_4 + X_5 + X_6 + X_7$ (4-input OR)
+  - Direct builder: `build_encoder_8to3(proj, name="Классический_8_в_3")`.
+- **10-to-4 BCD Encoder:**
+  - $Y_0 = X_1 + X_3 + X_5 + X_7 + X_9$ (5-input OR)
+  - $Y_1 = X_2 + X_3 + X_6 + X_7$ (4-input OR)
+  - $Y_2 = X_4 + X_5 + X_6 + X_7$ (4-input OR)
+  - $Y_3 = X_8 + X_9$ (2-input OR)
+  - Direct builder: `build_encoder_10to4_bcd(proj, name="Шифратор_10_в_4_BCD")`.
+- **Variant Encoders (e.g. 19-to-5):**
+  - Use `build_encoder_n_to_m(proj, name="main", num_inputs=19)` which automatically formats inputs vertically with 30px pitch and places 5 OR gates.
+
+### 5.3 Мультиплексор (Multiplexer 4-to-1 & 8-to-1)
+- **4-to-1 Logic:**
+  $$Y = (D_0 \cdot \overline{A_1} \cdot \overline{A_0} \cdot E) \lor (D_1 \cdot \overline{A_1} \cdot A_0 \cdot E) \lor (D_2 \cdot A_1 \cdot \overline{A_0} \cdot E) \lor (D_3 \cdot A_1 \cdot A_0 \cdot E)$$
+- **Structure:**
+  - 4 (or 8) AND gates combining each data input $D_i$ with its unique binary address minterm and enable $E$.
+  - 1 final multi-input OR gate collecting all AND gate outputs into single output $Y$.
+  - Direct builders: `build_multiplexer_4to1(proj)` and `build_multiplexer_8to1(proj)`.
+
+### 5.4 Демультиплексор (Demultiplexer 1-to-4 & 1-to-8)
+- **1-to-4 Logic:**
+  $$Y_i = DI \cdot (\text{Address} == i) \cdot E$$
+- **Structure:**
+  - Single informational input $DI$, enable $E$, and address selection lines.
+  - 4 (or 8) AND gates driving independent output lines $Y_0 \dots Y_3$.
+  - Direct builders: `build_demultiplexer_1to4(proj)` and `build_demultiplexer_1to8(proj)`.
+
+---
+
+## 6. Python API & Instant Code Recipes
+
+### Recipe: Programmatic Generation with Segmented Buses & Toolbar
 ```python
-from logisim_builder import Project, Pin, AndGate, OrGate, NotGate
+from scripts.logisim_builder import (
+    Project, Pin, AndGate, OrGate, NotGate,
+    build_decoder_2to4, build_encoder_8to3,
+    build_multiplexer_4to1, build_demultiplexer_1to4
+)
 
 # 1. Initialize project
 proj = Project(name="main")
-c = proj.main
 
-# 2. Add components with exact coordinates
-pin_a = c.add(Pin(100, 100, label="A"))
-pin_b = c.add(Pin(100, 140, label="B"))
-and_gate = c.add(AndGate(240, 120, inputs=2, size=50))
-out_pin = c.add(Pin(320, 120, label="Y", facing="west", output=True))
+# 2. Add canonical circuits instantly
+build_decoder_2to4(proj, name="main", with_enable=True)
+build_encoder_8to3(proj, name="Классический_8_в_3")
+build_multiplexer_4to1(proj, name="Мультиплексор_4_в_1", with_enable=True)
 
-# 3. Connect via orthogonal Manhattan routing
-c.connect(pin_a, "pin", and_gate, "in0", routing="hv")
-c.connect(pin_b, "pin", and_gate, "in1", routing="hv")
-c.connect(and_gate, "out", out_pin, "pin")
+# 3. Custom circuit with segmented buses
+c = proj.get_or_create_circuit("CustomBusLogic")
+p1 = c.add(Pin(80, 100, label="IN0"))
+p2 = c.add(Pin(80, 160, label="IN1"))
+g = c.add(AndGate(300, 130, inputs=2, size=50))
+out = c.add(Pin(380, 130, label="OUT", facing="west", output=True))
 
-# 4. Save to validated .circ XML
-proj.save("and_logic.circ")
+# Connect via segmented vertical bus
+c.wire(p1.get_port("pin"), (140, 100))
+c.wire(p2.get_port("pin"), (140, 160))
+c.add_vbus(140, [100, 110, 150, 160]) # Segmented between taps
+c.wire((140, 110), g.get_port("in0"))
+c.wire((140, 150), g.get_port("in1"))
+c.connect(g, "out", out, "pin")
+
+# 4. Save (automatically writes full <mappings> and <toolbar>)
+proj.save("lab_circuits.circ")
 ```
 
 ---
 
-## 4. Verification and Quality Checklist
+## 7. Verification Checklist
 
 Before finalizing any `.circ` file, verify:
 
-1. **All coordinates are multiples of 10.**
-2. **Every wire has either $X_1 = X_2$ or $Y_1 = Y_2$.**
-3. **No loose wire ends near pins:** Check that input/output connections touch the exact pin offsets.
-4. **Output pins face west (`facing="west"`, `output="true"`):** This places the wire contact on the left side facing inward.
-5. **Bus widths match:** If a pin or gate is 4-bit, the connected wire and destination port must also support 4 bits.
-6. **Execute automated validator:**
+1. **Toolbar & Mappings Included:** Verify `<toolbar>` contains Poke Tool and Edit Tool.
+2. **All coordinates are multiples of 10.**
+3. **Every wire has either $X_1 = X_2$ or $Y_1 = Y_2$** (zero diagonal lines).
+4. **No loose wire ends:** Taps land on exact port offsets.
+5. **No label collisions:** Pin array pitch is $\ge 30\text{--}40$ px; inputs face east (`labelloc="west"`), outputs face west (`labelloc="east"`).
+6. **No overlapping collinear wire runs:** Use `add_vbus` / `add_hbus` for bus taps.
+7. **Run automated validator:**
    ```bash
-   python scripts/validate_circ.py <path_to_circuit.circ> [path_to_logisim.jar]
+   cmd.exe /c "python scripts/validate_circ.py <path_to_circuit.circ>"
    ```

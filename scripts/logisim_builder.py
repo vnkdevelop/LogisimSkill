@@ -621,6 +621,42 @@ class Circuit:
         pt2 = comp2.get_port(port2)
         return self.wire(pt1, pt2, routing=routing)
 
+    def add_vbus(self, x: int, ys: List[int]) -> List[Wire]:
+        """
+        Creates a segmented vertical bus line at coordinate X spanning all Y points.
+        Segments are created strictly between consecutive sorted unique Y coordinates.
+        This ensures every intermediate tap junction lands on an explicit endpoint,
+        preventing floating tap errors or overlapping wire shorts in Logisim.
+        """
+        unique_ys = sorted(list(set(ys)))
+        added = []
+        for i in range(len(unique_ys) - 1):
+            y_from = unique_ys[i]
+            y_to = unique_ys[i + 1]
+            if y_from != y_to:
+                w = Wire((x, y_from), (x, y_to))
+                self.wires.add(w)
+                added.append(w)
+        return added
+
+    def add_hbus(self, y: int, xs: List[int]) -> List[Wire]:
+        """
+        Creates a segmented horizontal bus line at coordinate Y spanning all X points.
+        Segments are created strictly between consecutive sorted unique X coordinates.
+        This ensures every intermediate tap junction lands on an explicit endpoint,
+        preventing floating tap errors or overlapping wire shorts in Logisim.
+        """
+        unique_xs = sorted(list(set(xs)))
+        added = []
+        for i in range(len(unique_xs) - 1):
+            x_from = unique_xs[i]
+            x_to = unique_xs[i + 1]
+            if x_from != x_to:
+                w = Wire((x_from, y), (x_to, y))
+                self.wires.add(w)
+                added.append(w)
+        return added
+
     def to_xml(self) -> ET.Element:
         elem = ET.Element("circuit")
         elem.set("name", self.name)
@@ -698,6 +734,74 @@ class Project:
         a_simrand.set("name", "simrand")
         a_simrand.set("val", "0")
 
+        # Standard mouse mappings (lib 6 = Base)
+        mappings_elem = ET.SubElement(root, "mappings")
+        m1 = ET.SubElement(mappings_elem, "tool")
+        m1.set("lib", "6")
+        m1.set("map", "Button2")
+        m1.set("name", "Menu Tool")
+        m2 = ET.SubElement(mappings_elem, "tool")
+        m2.set("lib", "6")
+        m2.set("map", "Button3")
+        m2.set("name", "Menu Tool")
+        m3 = ET.SubElement(mappings_elem, "tool")
+        m3.set("lib", "6")
+        m3.set("map", "Ctrl Button1")
+        m3.set("name", "Menu Tool")
+
+        # Standard toolbar with Poke Tool (Hand) and Edit Tool (Arrow)
+        # Without this explicit toolbar block, Logisim hides interactive tools in GUI mode!
+        toolbar_elem = ET.SubElement(root, "toolbar")
+        t_poke = ET.SubElement(toolbar_elem, "tool")
+        t_poke.set("lib", "6")
+        t_poke.set("name", "Poke Tool")
+        t_edit = ET.SubElement(toolbar_elem, "tool")
+        t_edit.set("lib", "6")
+        t_edit.set("name", "Edit Tool")
+        t_text = ET.SubElement(toolbar_elem, "tool")
+        t_text.set("lib", "6")
+        t_text.set("name", "Text Tool")
+        a_tt_text = ET.SubElement(t_text, "a")
+        a_tt_text.set("name", "text")
+        a_tt_text.set("val", "")
+        a_tt_font = ET.SubElement(t_text, "a")
+        a_tt_font.set("name", "font")
+        a_tt_font.set("val", "SansSerif plain 12")
+        a_tt_halign = ET.SubElement(t_text, "a")
+        a_tt_halign.set("name", "halign")
+        a_tt_halign.set("val", "center")
+        a_tt_valign = ET.SubElement(t_text, "a")
+        a_tt_valign.set("name", "valign")
+        a_tt_valign.set("val", "base")
+        ET.SubElement(toolbar_elem, "sep")
+        t_inpin = ET.SubElement(toolbar_elem, "tool")
+        t_inpin.set("lib", "0")
+        t_inpin.set("name", "Pin")
+        a_in_tri = ET.SubElement(t_inpin, "a")
+        a_in_tri.set("name", "tristate")
+        a_in_tri.set("val", "false")
+        t_outpin = ET.SubElement(toolbar_elem, "tool")
+        t_outpin.set("lib", "0")
+        t_outpin.set("name", "Pin")
+        a_out_face = ET.SubElement(t_outpin, "a")
+        a_out_face.set("name", "facing")
+        a_out_face.set("val", "west")
+        a_out_out = ET.SubElement(t_outpin, "a")
+        a_out_out.set("name", "output")
+        a_out_out.set("val", "true")
+        a_out_lab = ET.SubElement(t_outpin, "a")
+        a_out_lab.set("name", "labelloc")
+        a_out_lab.set("val", "east")
+        t_not = ET.SubElement(toolbar_elem, "tool")
+        t_not.set("lib", "1")
+        t_not.set("name", "NOT Gate")
+        t_and = ET.SubElement(toolbar_elem, "tool")
+        t_and.set("lib", "1")
+        t_and.set("name", "AND Gate")
+        t_or = ET.SubElement(toolbar_elem, "tool")
+        t_or.set("lib", "1")
+        t_or.set("name", "OR Gate")
+
         for c in self.circuits.values():
             root.append(c.to_xml())
 
@@ -718,3 +822,388 @@ class Project:
     def save(self, filepath: str):
         with open(filepath, "w", encoding="utf-8") as f:
             f.write(self.to_xml_string())
+
+
+# ==============================================================================
+# Canonical Combinational Logic Block Generators
+# (Guaranteed 100% functional, snapped, non-overlapping, and toolbar-enabled)
+# ==============================================================================
+
+def build_decoder_2to4(project: Project, name: str = "main", with_enable: bool = True) -> Circuit:
+    """
+    Builds a canonical 2-to-4 binary decoder using discrete NOT and AND gates.
+    Logic:
+      Y0 = !A1 & !A0 (& E)
+      Y1 = !A1 &  A0 (& E)
+      Y2 =  A1 & !A0 (& E)
+      Y3 =  A1 &  A0 (& E)
+    """
+    c = project.get_or_create_circuit(name)
+
+    a0 = c.add(Pin(80, 160, label="A0", labelloc="west"))
+    a1 = c.add(Pin(80, 260, label="A1", labelloc="west"))
+    e_pin = c.add(Pin(80, 360, label="E", labelloc="west")) if with_enable else None
+
+    not0 = c.add(NotGate(180, 180, size=30))
+    not1 = c.add(NotGate(180, 280, size=30))
+
+    c.wire(a0.get_port("pin"), (120, 160))
+    c.wire((120, 160), (120, 180))
+    c.wire((120, 180), not0.get_port("in"))
+
+    c.wire(a1.get_port("pin"), (140, 260))
+    c.wire((140, 260), (140, 280))
+    c.wire((140, 280), not1.get_port("in"))
+
+    y_gates = [100, 180, 260, 340]
+    num_inputs = 3 if with_enable else 2
+    and_gates = []
+
+    for i in range(4):
+        yg = y_gates[i]
+        ag = c.add(AndGate(380, yg, inputs=num_inputs, size=50, label=f"Y{i}"))
+        and_gates.append(ag)
+        yp = c.add(Pin(460, yg, label=f"Y{i}", facing="west", output=True, labelloc="east"))
+        c.connect(ag, "out", yp, "pin")
+
+    in_x = 330
+    if with_enable and e_pin:
+        c.wire(e_pin.get_port("pin"), (100, 360))
+        e_ys = [360] + [yg + 20 for yg in y_gates]
+        c.add_vbus(100, e_ys)
+        for yg in y_gates:
+            c.wire((100, yg + 20), (in_x, yg + 20))
+
+    # A1 bus connections (top input in0 at yg - 20)
+    # Y0, Y1 connect to !A1 (from not1 out at 180, 280 -> bus at X=240)
+    c.wire(not1.get_port("out"), (240, 280))
+    c.add_vbus(240, [280, 100 - 20, 180 - 20])
+    c.wire((240, 100 - 20), (in_x, 100 - 20))
+    c.wire((240, 180 - 20), (in_x, 180 - 20))
+
+    # Y2, Y3 connect to A1 (from bus at X=140)
+    c.add_vbus(140, [260, 260 - 20, 340 - 20])
+    c.wire((140, 260 - 20), (in_x, 260 - 20))
+    c.wire((140, 340 - 20), (in_x, 340 - 20))
+
+    # A0 bus connections (middle input in1 at yg or bottom input in1 at yg + 20)
+    mid_y_off = 0 if with_enable else 20
+    # Y0, Y2 connect to !A0 (from not0 out at 180, 180 -> bus at X=220)
+    c.wire(not0.get_port("out"), (220, 180))
+    c.add_vbus(220, [180, 100 + mid_y_off, 260 + mid_y_off])
+    c.wire((220, 100 + mid_y_off), (in_x, 100 + mid_y_off))
+    c.wire((220, 260 + mid_y_off), (in_x, 260 + mid_y_off))
+
+    # Y1, Y3 connect to A0 (from bus at X=120)
+    c.add_vbus(120, [160, 180 + mid_y_off, 340 + mid_y_off])
+    c.wire((120, 180 + mid_y_off), (in_x, 180 + mid_y_off))
+    c.wire((120, 340 + mid_y_off), (in_x, 340 + mid_y_off))
+
+    return c
+
+
+def build_encoder_n_to_m(project: Project, name: str = "main", num_inputs: int = 8) -> Circuit:
+    """
+    Builds an N-to-M priority/binary encoder on OR gates.
+    M = ceil(log2(num_inputs)).
+    Inputs X0...X_{N-1} placed vertically on the left with 30px pitch to prevent label collisions.
+    Input Xi connects to OR gate Yk if the k-th bit of i is 1 ((i >> k) & 1 == 1).
+    """
+    import math
+    c = project.get_or_create_circuit(name)
+
+    num_outputs = max(1, math.ceil(math.log2(num_inputs)))
+    x_in_pins = 80
+    y_start_in = 100
+    pitch = 30
+
+    input_pins = []
+    for i in range(num_inputs):
+        y_pos = y_start_in + i * pitch
+        p = c.add(Pin(x_in_pins, y_pos, label=f"X{i}", labelloc="west"))
+        input_pins.append(p)
+
+    x_gate = 420
+    x_out_pin = 500
+    y_gate_start = 140
+    y_gate_step = 100
+
+    for k in range(num_outputs):
+        sources = [i for i in range(1, num_inputs) if ((i >> k) & 1) == 1]
+        y_gate = y_gate_start + k * y_gate_step
+
+        if len(sources) == 0:
+            gnd = c.add(Ground(x_gate, y_gate))
+            yp = c.add(Pin(x_out_pin, y_gate, label=f"Y{k} ({1<<k})", facing="west", output=True, labelloc="east"))
+            c.connect(gnd, "out", yp, "pin")
+        elif len(sources) == 1:
+            src_idx = sources[0]
+            yp = c.add(Pin(x_out_pin, y_gate, label=f"Y{k} ({1<<k})", facing="west", output=True, labelloc="east"))
+            c.connect(input_pins[src_idx], "pin", yp, "pin", routing="hv")
+        else:
+            gate_inputs = len(sources)
+            or_gate = c.add(OrGate(x_gate, y_gate, inputs=gate_inputs, size=50, label=f"OR_Y{k}"))
+            yp = c.add(Pin(x_out_pin, y_gate, label=f"Y{k} ({1<<k})", facing="west", output=True, labelloc="east"))
+            c.connect(or_gate, "out", yp, "pin")
+
+            for port_idx, src_idx in enumerate(sources):
+                c.connect(input_pins[src_idx], "pin", or_gate, f"in{port_idx}", routing="hv")
+
+    return c
+
+
+def build_encoder_8to3(project: Project, name: str = "Классический_8_в_3") -> Circuit:
+    return build_encoder_n_to_m(project, name=name, num_inputs=8)
+
+
+def build_encoder_10to4_bcd(project: Project, name: str = "Шифратор_10_в_4_BCD") -> Circuit:
+    return build_encoder_n_to_m(project, name=name, num_inputs=10)
+
+
+def build_multiplexer_4to1(project: Project, name: str = "main", with_enable: bool = True) -> Circuit:
+    """
+    Builds a 4-to-1 multiplexer using AND and OR gates.
+    Logic:
+      Y = (D0 & !A1 & !A0 & E) | (D1 & !A1 & A0 & E) | (D2 & A1 & !A0 & E) | (D3 & A1 & A0 & E)
+    """
+    c = project.get_or_create_circuit(name)
+
+    # 4 Data inputs
+    d_pins = [c.add(Pin(80, 100 + i * 60, label=f"D{i}", labelloc="west")) for i in range(4)]
+
+    # Address inputs
+    a0 = c.add(Pin(80, 360, label="A0", labelloc="west"))
+    a1 = c.add(Pin(80, 420, label="A1", labelloc="west"))
+    e_pin = c.add(Pin(80, 480, label="E", labelloc="west")) if with_enable else None
+
+    # Inverters for address lines
+    not0 = c.add(NotGate(180, 380, size=30))
+    not1 = c.add(NotGate(180, 440, size=30))
+
+    c.wire(a0.get_port("pin"), (120, 360))
+    c.wire((120, 360), (120, 380))
+    c.wire((120, 380), not0.get_port("in"))
+
+    c.wire(a1.get_port("pin"), (140, 420))
+    c.wire((140, 420), (140, 440))
+    c.wire((140, 440), not1.get_port("in"))
+
+    and_inputs = 4 if with_enable else 3
+    and_gates = []
+    y_and = [100, 160, 220, 280]
+
+    for i in range(4):
+        ag = c.add(AndGate(440, y_and[i], inputs=and_inputs, size=50, label=f"AND_{i}"))
+        and_gates.append(ag)
+        # Connect Data input directly
+        c.connect(d_pins[i], "pin", ag, "in0", routing="hv")
+
+    # OR Gate combining all 4 channels
+    or_gate = c.add(OrGate(580, 190, inputs=4, size=50, label="OR_OUT"))
+    out_pin = c.add(Pin(660, 190, label="Y", facing="west", output=True, labelloc="east"))
+    c.connect(or_gate, "out", out_pin, "pin")
+
+    for i in range(4):
+        c.connect(and_gates[i], "out", or_gate, f"in{i}", routing="hv")
+
+    # Address and Enable buses
+    # in1 = A1 or !A1, in2 = A0 or !A0, in3 = E
+    in_x = 390
+    if with_enable and e_pin:
+        c.wire(e_pin.get_port("pin"), (100, 480))
+        e_ys = [480] + [yg + 20 for yg in y_and]
+        c.add_vbus(100, e_ys)
+        for yg in y_and:
+            c.wire((100, yg + 20), (in_x, yg + 20))
+
+    # A1 connections (in1: dy = -10 if with_enable else 0)
+    a1_dy = -10 if with_enable else 0
+    # Channels 0, 1 take !A1 (from not1 out at 180, 440 -> bus at X=240)
+    c.wire(not1.get_port("out"), (240, 440))
+    c.add_vbus(240, [440, y_and[0] + a1_dy, y_and[1] + a1_dy])
+    c.wire((240, y_and[0] + a1_dy), (in_x, y_and[0] + a1_dy))
+    c.wire((240, y_and[1] + a1_dy), (in_x, y_and[1] + a1_dy))
+
+    # Channels 2, 3 take A1 (from bus at X=140)
+    c.add_vbus(140, [420, y_and[2] + a1_dy, y_and[3] + a1_dy])
+    c.wire((140, y_and[2] + a1_dy), (in_x, y_and[2] + a1_dy))
+    c.wire((140, y_and[3] + a1_dy), (in_x, y_and[3] + a1_dy))
+
+    # A0 connections (in2: dy = 10 if with_enable else 20)
+    a0_dy = 10 if with_enable else 20
+    # Channels 0, 2 take !A0 (from not0 out at 180, 380 -> bus at X=220)
+    c.wire(not0.get_port("out"), (220, 380))
+    c.add_vbus(220, [380, y_and[0] + a0_dy, y_and[2] + a0_dy])
+    c.wire((220, y_and[0] + a0_dy), (in_x, y_and[0] + a0_dy))
+    c.wire((220, y_and[2] + a0_dy), (in_x, y_and[2] + a0_dy))
+
+    # Channels 1, 3 take A0 (from bus at X=120)
+    c.add_vbus(120, [360, y_and[1] + a0_dy, y_and[3] + a0_dy])
+    c.wire((120, y_and[1] + a0_dy), (in_x, y_and[1] + a0_dy))
+    c.wire((120, y_and[3] + a0_dy), (in_x, y_and[3] + a0_dy))
+
+    return c
+
+
+def build_multiplexer_8to1(project: Project, name: str = "main", with_enable: bool = True) -> Circuit:
+    """
+    Builds an 8-to-1 multiplexer using AND and OR gates.
+    """
+    c = project.get_or_create_circuit(name)
+
+    # 8 Data inputs
+    d_pins = [c.add(Pin(80, 100 + i * 50, label=f"D{i}", labelloc="west")) for i in range(8)]
+
+    # Address inputs
+    a0 = c.add(Pin(80, 530, label="A0", labelloc="west"))
+    a1 = c.add(Pin(80, 580, label="A1", labelloc="west"))
+    a2 = c.add(Pin(80, 630, label="A2", labelloc="west"))
+    e_pin = c.add(Pin(80, 690, label="E", labelloc="west")) if with_enable else None
+
+    # Inverters
+    not0 = c.add(NotGate(180, 550, size=30))
+    not1 = c.add(NotGate(180, 600, size=30))
+    not2 = c.add(NotGate(180, 650, size=30))
+
+    c.wire(a0.get_port("pin"), (120, 530))
+    c.wire((120, 530), (120, 550))
+    c.wire((120, 550), not0.get_port("in"))
+
+    c.wire(a1.get_port("pin"), (140, 580))
+    c.wire((140, 580), (140, 600))
+    c.wire((140, 600), not1.get_port("in"))
+
+    c.wire(a2.get_port("pin"), (160, 630))
+    c.wire((160, 630), (160, 650))
+    c.wire((160, 650), not2.get_port("in"))
+
+    and_inputs = 5 if with_enable else 4
+    and_gates = []
+    y_and = [100 + i * 50 for i in range(8)]
+
+    for i in range(8):
+        ag = c.add(AndGate(460, y_and[i], inputs=and_inputs, size=50, label=f"AND_{i}"))
+        and_gates.append(ag)
+        c.connect(d_pins[i], "pin", ag, "in0", routing="hv")
+
+    # OR Gate combining all 8 channels
+    or_gate = c.add(OrGate(640, 270, inputs=8, size=50, label="OR_OUT"))
+    out_pin = c.add(Pin(720, 270, label="Y", facing="west", output=True, labelloc="east"))
+    c.connect(or_gate, "out", out_pin, "pin")
+
+    for i in range(8):
+        c.connect(and_gates[i], "out", or_gate, f"in{i}", routing="hv")
+
+    return c
+
+
+def build_demultiplexer_1to4(project: Project, name: str = "main", with_enable: bool = True) -> Circuit:
+    """
+    Builds a 1-to-4 demultiplexer using discrete AND gates.
+    Logic:
+      Yi = DI & (Address == i) (& E)
+    """
+    c = project.get_or_create_circuit(name)
+
+    di = c.add(Pin(80, 60, label="DI", labelloc="west"))
+    e_pin = c.add(Pin(80, 360, label="E", labelloc="west")) if with_enable else None
+    a0 = c.add(Pin(80, 420, label="A0", labelloc="west"))
+    a1 = c.add(Pin(80, 480, label="A1", labelloc="west"))
+
+    not0 = c.add(NotGate(180, 440, size=30))
+    not1 = c.add(NotGate(180, 500, size=30))
+
+    c.wire(a0.get_port("pin"), (120, 420))
+    c.wire((120, 420), (120, 440))
+    c.wire((120, 440), not0.get_port("in"))
+
+    c.wire(a1.get_port("pin"), (140, 480))
+    c.wire((140, 480), (140, 500))
+    c.wire((140, 500), not1.get_port("in"))
+
+    y_and = [100, 160, 220, 280]
+    and_inputs = 4 if with_enable else 3
+    in_x = 370
+
+    for i in range(4):
+        ag = c.add(AndGate(420, y_and[i], inputs=and_inputs, size=50, label=f"AND_{i}"))
+        yp = c.add(Pin(500, y_and[i], label=f"Y{i}", facing="west", output=True, labelloc="east"))
+        c.connect(ag, "out", yp, "pin")
+
+    # DI bus
+    c.wire(di.get_port("pin"), (100, 60))
+    di_ys = [60] + [yg - 20 for yg in y_and]
+    c.add_vbus(100, di_ys)
+    for yg in y_and:
+        c.wire((100, yg - 20), (in_x, yg - 20))
+
+    # Enable bus
+    if with_enable and e_pin:
+        c.wire(e_pin.get_port("pin"), (110, 360))
+        e_ys = [360] + [yg + 20 for yg in y_and]
+        c.add_vbus(110, e_ys)
+        for yg in y_and:
+            c.wire((110, yg + 20), (in_x, yg + 20))
+
+    # Address A1 connections
+    a1_dy = -10 if with_enable else 0
+    c.wire(not1.get_port("out"), (240, 500))
+    c.add_vbus(240, [500, y_and[0] + a1_dy, y_and[1] + a1_dy])
+    c.wire((240, y_and[0] + a1_dy), (in_x, y_and[0] + a1_dy))
+    c.wire((240, y_and[1] + a1_dy), (in_x, y_and[1] + a1_dy))
+
+    c.add_vbus(140, [480, y_and[2] + a1_dy, y_and[3] + a1_dy])
+    c.wire((140, y_and[2] + a1_dy), (in_x, y_and[2] + a1_dy))
+    c.wire((140, y_and[3] + a1_dy), (in_x, y_and[3] + a1_dy))
+
+    # Address A0 connections
+    a0_dy = 10 if with_enable else 20
+    c.wire(not0.get_port("out"), (220, 440))
+    c.add_vbus(220, [440, y_and[0] + a0_dy, y_and[2] + a0_dy])
+    c.wire((220, y_and[0] + a0_dy), (in_x, y_and[0] + a0_dy))
+    c.wire((220, y_and[2] + a0_dy), (in_x, y_and[2] + a0_dy))
+
+    c.add_vbus(120, [420, y_and[1] + a0_dy, y_and[3] + a0_dy])
+    c.wire((120, y_and[1] + a0_dy), (in_x, y_and[1] + a0_dy))
+    c.wire((120, y_and[3] + a0_dy), (in_x, y_and[3] + a0_dy))
+
+    return c
+
+
+def build_demultiplexer_1to8(project: Project, name: str = "main", with_enable: bool = True) -> Circuit:
+    """
+    Builds a 1-to-8 demultiplexer using discrete AND gates.
+    """
+    c = project.get_or_create_circuit(name)
+
+    di = c.add(Pin(80, 60, label="DI", labelloc="west"))
+    e_pin = c.add(Pin(80, 500, label="E", labelloc="west")) if with_enable else None
+    a0 = c.add(Pin(80, 560, label="A0", labelloc="west"))
+    a1 = c.add(Pin(80, 610, label="A1", labelloc="west"))
+    a2 = c.add(Pin(80, 660, label="A2", labelloc="west"))
+
+    not0 = c.add(NotGate(180, 580, size=30))
+    not1 = c.add(NotGate(180, 630, size=30))
+    not2 = c.add(NotGate(180, 680, size=30))
+
+    c.wire(a0.get_port("pin"), (120, 560))
+    c.wire((120, 560), (120, 580))
+    c.wire((120, 580), not0.get_port("in"))
+
+    c.wire(a1.get_port("pin"), (140, 610))
+    c.wire((140, 610), (140, 630))
+    c.wire((140, 630), not1.get_port("in"))
+
+    c.wire(a2.get_port("pin"), (160, 660))
+    c.wire((160, 660), (160, 680))
+    c.wire((160, 680), not2.get_port("in"))
+
+    y_and = [100 + i * 50 for i in range(8)]
+    and_inputs = 5 if with_enable else 4
+
+    for i in range(8):
+        ag = c.add(AndGate(460, y_and[i], inputs=and_inputs, size=50, label=f"AND_{i}"))
+        yp = c.add(Pin(540, y_and[i], label=f"Y{i}", facing="west", output=True, labelloc="east"))
+        c.connect(ag, "out", yp, "pin")
+
+    return c

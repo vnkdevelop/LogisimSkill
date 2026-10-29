@@ -13,7 +13,9 @@ if scripts_dir not in sys.path:
 
 from logisim_builder import (
     Project, Pin, AndGate, OrGate, NotGate, XorGate, DFlipFlop,
-    Coordinate, Wire
+    Coordinate, Wire,
+    build_decoder_2to4, build_encoder_8to3, build_encoder_10to4_bcd,
+    build_multiplexer_4to1, build_demultiplexer_1to4
 )
 from validate_circ import validate_circ
 
@@ -144,6 +146,46 @@ class TestLogisimBuilder(unittest.TestCase):
         c.wire((180, 160), (220, 160)) # connects to D at (260-40, 160)
 
         out_path = os.path.join(self.examples_dir, "d_flip_flop_divider.circ")
+        proj.save(out_path)
+        self.assertTrue(validate_circ(out_path, self.logisim_jar if os.path.exists(self.logisim_jar) else None))
+
+    def test_toolbar_and_mappings_generation(self):
+        """Verifies that every generated project includes toolbar and mappings for Logisim GUI."""
+        proj = Project(name="main")
+        c = proj.main
+        c.add(Pin(100, 100, label="IN"))
+        xml_str = proj.to_xml_string()
+
+        self.assertIn("<toolbar>", xml_str)
+        self.assertIn("name=\"Poke Tool\"", xml_str)
+        self.assertIn("name=\"Edit Tool\"", xml_str)
+        self.assertIn("<mappings>", xml_str)
+
+    def test_segmented_bus_helper(self):
+        """Verifies that add_vbus and add_hbus generate non-overlapping contiguous segments."""
+        proj = Project(name="main")
+        c = proj.main
+        v_wires = c.add_vbus(100, [300, 100, 200]) # Unsorted input
+        self.assertEqual(len(v_wires), 2)
+        # Check segment 1: (100, 100) -> (100, 200)
+        # Check segment 2: (100, 200) -> (100, 300)
+        self.assertIn(Wire((100, 100), (100, 200)), c.wires)
+        self.assertIn(Wire((100, 200), (100, 300)), c.wires)
+
+        h_wires = c.add_hbus(200, [400, 150, 250])
+        self.assertEqual(len(h_wires), 2)
+        self.assertIn(Wire((150, 200), (250, 200)), c.wires)
+        self.assertIn(Wire((250, 200), (400, 200)), c.wires)
+
+    def test_canonical_builders(self):
+        """Verifies that standard canonical builders generate valid circuits."""
+        proj = Project(name="main")
+        build_decoder_2to4(proj, name="main", with_enable=True)
+        build_encoder_8to3(proj, name="Классический_8_в_3")
+        build_multiplexer_4to1(proj, name="Мультиплексор_4_в_1", with_enable=True)
+        build_demultiplexer_1to4(proj, name="Демультиплексор_1_в_4", with_enable=True)
+
+        out_path = os.path.join(self.examples_dir, "canonical_suite.circ")
         proj.save(out_path)
         self.assertTrue(validate_circ(out_path, self.logisim_jar if os.path.exists(self.logisim_jar) else None))
 

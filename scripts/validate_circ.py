@@ -43,6 +43,19 @@ def validate_circ(filepath: str, logisim_jar: Optional[str] = None) -> bool:
     if root.tag != "project":
         errors.append(f"Root tag must be <project>, found <{root.tag}>")
 
+    # Check for Toolbar and Mappings (crucial for Logisim GUI interactive tools)
+    toolbar = root.find("toolbar")
+    if toolbar is None:
+        warnings.append("Project missing <toolbar> element. Logisim GUI will hide the Poke/Edit toolbar!")
+    else:
+        poke_tools = [t for t in toolbar.findall("tool") if t.attrib.get("name") == "Poke Tool"]
+        if not poke_tools:
+            warnings.append("Toolbar missing 'Poke Tool'. User will not be able to interact with inputs in GUI!")
+
+    mappings = root.find("mappings")
+    if mappings is None:
+        warnings.append("Project missing <mappings> element.")
+
     circuits = root.findall("circuit")
     if not circuits:
         errors.append("No <circuit> definitions found in project.")
