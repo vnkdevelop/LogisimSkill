@@ -194,6 +194,27 @@ Connecting wires directly into component pins tangentially or along the edge of 
 
 ---
 
+### 3.8 Footprint & Clearance Rules for Large I/O Components (Габариты больших элементов и защита от наложений)
+Unlike standard 2-input logic gates ($50 \times 50$ px) or discrete flip-flops ($40 \times 40$ px), peripheral and interactive I/O components have **substantially larger physical footprints** on the canvas:
+- **TTY Terminal (`lib="5" name="TTY"`):**
+  - Physical Footprint: Width $\approx \max(160, \text{cols} \times 8 + 20)$ px, Height $\approx \max(80, \text{rows} \times 14 + 20)$ px.
+  - Standard $32 \times 8$ terminal footprint is **$280 \times 140$ px**!
+  - **Spacing Rule:** Adjacent components must maintain $\Delta X \ge 320$ px and $\Delta Y \ge 180$ px clearance.
+- **LED Matrix (`lib="5" name="DotMatrix"`):**
+  - Physical Footprint: Width $= \text{matrixcols} \times 10 + 10$ px, Height $= \text{matrixrows} \times 10 + 10$ px.
+  - An $8 \times 8$ matrix is $90 \times 90$ px; a $16 \times 16$ matrix is **$170 \times 170$ px**.
+  - **Spacing Rule:** Reserve at least 30 px clearance around the full grid envelope.
+- **Keyboard (`lib="5" name="Keyboard"`):**
+  - Physical Footprint: **$140 \times 40$ px** (extends horizontally to display the typing buffer).
+  - **Spacing Rule:** Reserve a horizontal clearance corridor of $\ge 160$ px, and $\ge 40$ px vertical space underneath for south bus exits (`re`, `clr`, `avail`, `data`).
+- **Joystick (`lib="5" name="Joystick"`):**
+  - Physical Footprint: **$60 \times 60$ px** square.
+  - **Spacing Rule:** Wires exit exclusively to the West. Leave at least 30-40 px corridor on the left.
+- **7-Segment & Hex Displays (`7-Segment Display`, `Hex Digit Display`):**
+  - Physical Footprint: **$40 \times 70$ px**.
+  - In multi-digit readout arrays, maintain a pitch of **$\Delta X \ge 50$ px** (minimum 10 px clearance between adjacent digits; never overlap display bodies).
+- **Zero Wire Penetration for Large Blocks:** Wires for other signals must NEVER pass through the bounding box of any large I/O block. All buses must be routed along dedicated perimeter corridors with $\ge 20$ px clearance around the block.
+
 ## 4. Ground-Truth Component Pin Geometry & Library Index
 
 For a component placed at anchor `loc="(X,Y)"`, its pin positions are calculated as `(X + dx, Y + dy)`.

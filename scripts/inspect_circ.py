@@ -171,6 +171,41 @@ def get_component_port_info(comp_name: str, loc: Tuple[int, int], attrs: Dict[st
         ports["enable"] = {"pt": (x - 10, y), "normal": (-1, 0)}
         for i in range(out_cnt):
             ports[f"out{i}"] = {"pt": (x + 10, y - 10 - 20 * (out_cnt - 1 - i)), "normal": (1, 0)}
+    elif comp_name == "Button":
+        facing_map = {"east": (1, 0), "west": (-1, 0), "south": (0, 1), "north": (0, -1)}
+        ports["out"] = {"pt": (x, y), "normal": facing_map.get(facing, (1, 0))}
+    elif comp_name == "Joystick":
+        ports["x"] = {"pt": (x, y - 10), "normal": (-1, 0)}
+        ports["y"] = {"pt": (x, y + 10), "normal": (-1, 0)}
+    elif comp_name == "Keyboard":
+        ports["clock"] = {"pt": (x, y), "normal": (-1, 0)}
+        ports["re"] = {"pt": (x + 20, y + 20), "normal": (0, 1)}
+        ports["clr"] = {"pt": (x + 40, y + 20), "normal": (0, 1)}
+        ports["avail"] = {"pt": (x + 60, y + 20), "normal": (0, 1)}
+        ports["data"] = {"pt": (x + 80, y + 20), "normal": (0, 1)}
+    elif comp_name == "LED":
+        led_facing = attrs.get("facing", "west")
+        ports["in"] = {"pt": (x, y), "normal": facing_normals.get(led_facing, (-1, 0))}
+    elif comp_name == "7-Segment Display":
+        ports["a"] = {"pt": (x + 10, y), "normal": (0, -1)}
+        ports["b"] = {"pt": (x + 20, y), "normal": (0, -1)}
+        ports["f"] = {"pt": (x, y), "normal": (0, -1)}
+        ports["g"] = {"pt": (x + 30, y), "normal": (0, -1)}
+        ports["e"] = {"pt": (x, y + 60), "normal": (0, 1)}
+        ports["d"] = {"pt": (x + 10, y + 60), "normal": (0, 1)}
+        ports["c"] = {"pt": (x + 20, y + 60), "normal": (0, 1)}
+        ports["dp"] = {"pt": (x + 30, y + 60), "normal": (0, 1)}
+    elif comp_name == "Hex Digit Display":
+        ports["data"] = {"pt": (x, y), "normal": (0, 1)}
+        ports["dp"] = {"pt": (x + 10, y), "normal": (0, 1)}
+    elif comp_name == "DotMatrix":
+        ports["cols"] = {"pt": (x, y), "normal": (-1, 0)}
+        ports["rows"] = {"pt": (x, y + 20), "normal": (-1, 0)}
+    elif comp_name == "TTY":
+        ports["data"] = {"pt": (x, y), "normal": (-1, 0)}
+        ports["clock"] = {"pt": (x, y + 20), "normal": (-1, 0)}
+        ports["we"] = {"pt": (x + 20, y + 40), "normal": (0, 1)}
+        ports["clr"] = {"pt": (x + 40, y + 40), "normal": (0, 1)}
     else:
         # Generic component fallback
         ports["anchor"] = {"pt": (x, y), "normal": None}
@@ -240,6 +275,28 @@ def get_component_bbox(name: str, loc: Tuple[int, int], attrs: Dict[str, str]) -
 
     elif name in ("Register", "Counter"):
         return (x - 30, y - 15, x + 5, y + 25)
+    elif name == "Button":
+        return (x - 30, y - 10, x, y + 10) if facing == "east" else (x - 10, y - 10, x + 10, y + 10)
+    elif name == "Joystick":
+        return (x, y - 30, x + 60, y + 30)
+    elif name == "Keyboard":
+        return (x, y - 10, x + 140, y + 30)
+    elif name == "LED":
+        return (x - 10, y - 10, x + 10, y + 10)
+    elif name == "7-Segment Display":
+        return (x - 5, y, x + 35, y + 65)
+    elif name == "Hex Digit Display":
+        return (x - 5, y - 65, x + 35, y)
+    elif name == "DotMatrix":
+        cols = int(attrs.get("matrixcols", "5"))
+        rows = int(attrs.get("matrixrows", "7"))
+        return (x, y - 10, x + cols * 10 + 10, y + rows * 10 + 10)
+    elif name == "TTY":
+        cols = int(attrs.get("columns", "32")) if "columns" in attrs else int(attrs.get("cols", "32"))
+        rows = int(attrs.get("rows", "8"))
+        w = max(160, cols * 8 + 20)
+        h = max(80, rows * 14 + 20)
+        return (x, y, x + w, y + h)
 
     elif name in ("Multiplexer", "Demultiplexer"):
         sel_cnt = int(attrs.get("select", "1"))

@@ -529,6 +529,68 @@ def Led(x: int, y: int, label: str = "", color: str = "r=240,g=0,b=0") -> Compon
     return Component(lib=5, name="LED", loc=(x, y), attrs=attrs, ports={"in": (0, 0)})
 
 
+def Button(x: int, y: int, label: str = "", facing: str = "east", color: str = "r=255,g=255,b=255") -> Component:
+    attrs = {"facing": facing, "color": f"java.awt.Color[{color}]"}
+    if label:
+        attrs["label"] = label
+    return Component(lib=5, name="Button", loc=(x, y), attrs=attrs, ports={"out": (0, 0)})
+
+
+def Joystick(x: int, y: int, bits: int = 4, color: str = "r=255,g=0,b=0") -> Component:
+    attrs = {"bits": str(bits), "color": f"java.awt.Color[{color}]"}
+    ports = {
+        "x": (0, -10),
+        "y": (0, 10)
+    }
+    return Component(lib=5, name="Joystick", loc=(x, y), attrs=attrs, ports=ports)
+
+
+def Keyboard(x: int, y: int, buflen: int = 32, trigger: str = "rising") -> Component:
+    attrs = {"buflen": str(buflen), "trigger": trigger}
+    ports = {
+        "clock": (0, 0),
+        "re": (20, 20),
+        "clr": (40, 20),
+        "avail": (60, 20),
+        "data": (80, 20)
+    }
+    return Component(lib=5, name="Keyboard", loc=(x, y), attrs=attrs, ports=ports)
+
+
+def DotMatrix(
+    x: int,
+    y: int,
+    inputtype: str = "select",
+    rows: int = 7,
+    cols: int = 5,
+    dotshape: str = "circle",
+    color: str = "r=0,g=255,b=0"
+) -> Component:
+    attrs = {
+        "inputtype": inputtype,
+        "matrixrows": str(rows),
+        "matrixcols": str(cols),
+        "dotshape": dotshape,
+        "color": f"java.awt.Color[{color}]"
+    }
+    ports = {
+        "cols": (0, 0),
+        "rows": (0, 20)
+    }
+    return Component(lib=5, name="DotMatrix", loc=(x, y), attrs=attrs, ports=ports)
+
+
+def TTY(x: int, y: int, rows: int = 8, cols: int = 32, trigger: str = "rising") -> Component:
+    attrs = {"rows": str(rows), "columns": str(cols), "trigger": trigger}
+    ports = {
+        "data": (0, 0),
+        "clock": (0, 20),
+        "we": (20, 40),
+        "clr": (40, 40)
+    }
+    return Component(lib=5, name="TTY", loc=(x, y), attrs=attrs, ports=ports)
+
+
 def SevenSegment(x: int, y: int) -> Component:
     ports = {
         "a": (10, 0),
@@ -610,6 +672,24 @@ def get_component_port_normal(comp: Component, port_name: str) -> Optional[Tuple
             return (-1, 0) if port_name == "in" else (1, 0)
         elif name == "Decoder":
             return (-1, 0) if port_name in ("sel", "enable") else (1, 0)
+    elif name == "Button":
+        facing_map = {"east": (1, 0), "west": (-1, 0), "south": (0, 1), "north": (0, -1)}
+        return facing_map.get(facing, (1, 0))
+    elif name == "Joystick":
+        return (-1, 0)
+    elif name == "Keyboard":
+        return (-1, 0) if port_name == "clock" else (0, 1)
+    elif name == "LED":
+        facing_map = {"east": (1, 0), "west": (-1, 0), "south": (0, 1), "north": (0, -1)}
+        return facing_map.get(facing, (-1, 0))
+    elif name == "7-Segment Display":
+        return (0, -1) if port_name in ("a", "b", "f", "g") else (0, 1)
+    elif name == "Hex Digit Display":
+        return (0, 1)
+    elif name == "DotMatrix":
+        return (-1, 0)
+    elif name == "TTY":
+        return (-1, 0) if port_name in ("data", "clock") else (0, 1)
     return None
 
 
