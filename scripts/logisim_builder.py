@@ -405,7 +405,9 @@ def Subtractor(x: int, y: int, width: int = 8) -> Component:
         "inB": (-40, 10),
         "out": (0, 0),
         "bin": (-20, -20),
-        "bout": (-20, 20)
+        "bout": (-20, 20),
+        "cin": (-20, -20),
+        "cout": (-20, 20)
     }
     return Component(lib=3, name="Subtractor", loc=(x, y), attrs=attrs, ports=ports)
 
@@ -630,8 +632,9 @@ def Subcircuit(name: str, x: int, y: int, ports: Optional[Dict[str, Tuple[int, i
 
 def get_component_port_normal(comp: Component, port_name: str) -> Optional[Tuple[int, int]]:
     """Determines outward normal unit vector for a port on a component."""
-    facing = comp.attrs.get("facing", "east")
     name = comp.name
+    default_facing = "west" if name == "LED" else "east"
+    facing = comp.attrs.get("facing", default_facing)
 
     if name == "Pin":
         facing_map = {"east": (1, 0), "west": (-1, 0), "south": (0, 1), "north": (0, -1)}
@@ -646,7 +649,12 @@ def get_component_port_normal(comp: Component, port_name: str) -> Optional[Tuple
     elif name == "Tunnel":
         facing_map = {"east": (1, 0), "west": (-1, 0), "south": (0, 1), "north": (0, -1)}
         return facing_map.get(facing, (-1, 0))
-    elif name in ("NOT Gate", "AND Gate", "OR Gate", "NAND Gate", "NOR Gate", "XOR Gate", "XNOR Gate"):
+    elif name == "Splitter":
+        if port_name == "trunk":
+            return (-1, 0) if facing == "east" else ((1, 0) if facing == "west" else ((0, -1) if facing == "south" else (0, 1)))
+        else:
+            return (1, 0) if facing == "east" else ((-1, 0) if facing == "west" else ((0, 1) if facing == "south" else (0, -1)))
+    elif name in ("NOT Gate", "AND Gate", "OR Gate", "NAND Gate", "NOR Gate", "XOR Gate", "XNOR Gate", "Buffer"):
         is_out = (port_name == "out")
         if facing == "east":
             return (1, 0) if is_out else (-1, 0)
@@ -656,6 +664,18 @@ def get_component_port_normal(comp: Component, port_name: str) -> Optional[Tuple
             return (0, 1) if is_out else (0, -1)
         elif facing == "north":
             return (0, -1) if is_out else (0, 1)
+    elif name in ("Controlled Buffer", "Controlled Inverter"):
+        ctrl = comp.attrs.get("control", "right")
+        ctrl_dy = 1 if ctrl == "right" else -1
+        if port_name == "ctrl":
+            if facing in ("east", "west"):
+                return (0, ctrl_dy)
+            else:
+                return (ctrl_dy, 0)
+        elif port_name == "out":
+            return (1, 0) if facing == "east" else ((-1, 0) if facing == "west" else ((0, 1) if facing == "south" else (0, -1)))
+        elif port_name == "in":
+            return (-1, 0) if facing == "east" else ((1, 0) if facing == "west" else ((0, -1) if facing == "south" else (0, 1)))
     elif "Flip-Flop" in name:
         if port_name in ("d", "t", "j", "k", "s", "r", "clock"):
             return (-1, 0)
@@ -663,15 +683,45 @@ def get_component_port_normal(comp: Component, port_name: str) -> Optional[Tuple
             return (1, 0)
         elif port_name in ("reset", "preset", "enable"):
             return (0, 1)
-    elif name in ("Multiplexer", "Demultiplexer", "Decoder"):
+    elif name == "Decoder":
+        return (-1, 0) if port_name in ("sel", "enable") else (1, 0)
+    elif name in ("Multiplexer", "Demultiplexer"):
         if port_name in ("sel", "enable"):
             return (0, 1)
         if name == "Multiplexer":
             return (1, 0) if port_name == "out" else (-1, 0)
         elif name == "Demultiplexer":
             return (-1, 0) if port_name == "in" else (1, 0)
-        elif name == "Decoder":
-            return (-1, 0) if port_name in ("sel", "enable") else (1, 0)
+    elif name in ("Adder", "Subtractor", "Multiplier", "Divider"):
+        if port_name in ("inA", "inB"):
+            return (-1, 0)
+        elif port_name == "out":
+            return (1, 0)
+        elif port_name in ("cin", "bin"):
+            return (0, -1)
+        elif port_name in ("cout", "bout"):
+            return (0, 1)
+    elif name == "Comparator":
+        if port_name in ("inA", "inB"):
+            return (-1, 0)
+        elif port_name in ("gt", "eq", "lt"):
+            return (1, 0)
+    elif name == "Register":
+        if port_name in ("in", "enable"):
+            return (-1, 0)
+        elif port_name == "out":
+            return (1, 0)
+        elif port_name in ("clock", "clear"):
+            return (0, 1)
+    elif name == "Counter":
+        if port_name in ("in", "load", "count"):
+            return (-1, 0)
+        elif port_name in ("out", "carry"):
+            return (1, 0)
+        elif port_name in ("clock", "clear"):
+            return (0, 1)
+    elif name in ("RAM", "ROM"):
+        return (-1, 0) if port_name == "addr" else (1, 0)
     elif name == "Button":
         facing_map = {"east": (1, 0), "west": (-1, 0), "south": (0, 1), "north": (0, -1)}
         return facing_map.get(facing, (1, 0))

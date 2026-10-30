@@ -264,8 +264,8 @@ Gates facing `east` have their output at `(0, 0)` relative to `loc`.
 | Component | Default Attributes | Pin Name | dx | dy | Description |
 | :--- | :--- | :--- | :---: | :---: | :--- |
 | **Multiplexer** | `select="1"` (2-to-1) | `in0`<br>`in1`<br>`out`<br>`sel` | `-30`<br>`-30`<br>`0`<br>`-20` | `-10`<br>`10`<br>`0`<br>`20` | Input 0<br>Input 1<br>Selected Output<br>Select line |
-| **Demultiplexer**| `select="1"` (1-to-2) | `in`<br>`out0`<br>`out1`<br>`sel` | `-20`<br>`0`<br>`0`<br>`-10` | `0`<br>`-10`<br>`10`<br>`20` | Data In<br>Output 0<br>Output 1<br>Select line |
-| **Decoder** | `select="2"` (2-to-4) | `sel`<br>`out0..out3` | `-20`<br>`0` | `0`<br>`-30..0` | Select address<br>Decoded outputs |
+| **Demultiplexer**| `select="1"` (1-to-2) | `in`<br>`out0`<br>`out1`<br>`sel` | `0`<br>`30`<br>`30`<br>`20` | `0`<br>`-10`<br>`10`<br>`20` | Data In<br>Output 0<br>Output 1<br>Select line |
+| **Decoder** | `select="2"` (2-to-4) | `sel`<br>`enable`<br>`out0..out3` | `0`<br>`-10`<br>`10` | `0`<br>`0`<br>`-70..-10` | Select address<br>Enable input<br>Decoded outputs |
 
 ### 4.4 Arithmetic Modules (`lib="3"`)
 | Component | Pin Name | dx | dy | Description |

@@ -13,7 +13,7 @@ if scripts_dir not in sys.path:
 
 from logisim_builder import (
     Project, Pin, AndGate, OrGate, NotGate, XorGate, DFlipFlop,
-    Coordinate, Wire,
+    Coordinate, Wire, XnorGate, Buffer, Demultiplexer, Decoder, Splitter,
     build_decoder_2to4, build_encoder_8to3, build_encoder_10to4_bcd,
     build_matrix_encoder, build_multiplexer_4to1, build_multiplexer_8to1,
     build_demultiplexer_1to4, build_demultiplexer_1to8,
@@ -213,6 +213,57 @@ class TestLogisimBuilder(unittest.TestCase):
             self.assertFalse(r.passed, "Overlapping pins must fail inspection!")
             self.assertTrue(any("Collision" in err or "Overlap" in err for err in r.errors),
                             f"Expected collision error, got: {r.errors}")
+        finally:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+
+
+    def test_xnor_and_buffers_compliance(self):
+        """Verifies XNOR Gate geometry and Buffer/Splitter port compliance."""
+        proj = Project(name="main")
+        c = proj.main
+
+        xnor = c.add(XnorGate(200, 200, inputs=2, size=50))
+        p_in0 = c.add(Pin(80, 180, label="A"))
+        p_in1 = c.add(Pin(80, 220, label="B"))
+        p_out = c.add(Pin(300, 200, label="Y", facing="west", output=True))
+
+        c.connect(p_in0, "pin", xnor, "in0")
+        c.connect(p_in1, "pin", xnor, "in1")
+        c.connect(xnor, "out", p_out, "pin")
+
+        tmp_path = os.path.join(self.examples_dir, "test_xnor_suite.circ")
+        try:
+            proj.save(tmp_path)
+            r = inspect_circuit(tmp_path, strict=True)
+            self.assertTrue(r.passed, f"XNOR Gate inspection failed: {r.errors}")
+            self.assertTrue(validate_circ(tmp_path, self.logisim_jar if os.path.exists(self.logisim_jar) else None))
+        finally:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+
+    def test_demux_and_decoder_macro_compliance(self):
+        """Verifies Demultiplexer and Decoder macro geometry compliance."""
+        proj = Project(name="main")
+        c = proj.main
+
+        demux = c.add(Demultiplexer(200, 200, select=1))
+        p_in = c.add(Pin(120, 200, label="IN"))
+        p_out0 = c.add(Pin(320, 190, label="O0", facing="west", output=True))
+        p_out1 = c.add(Pin(320, 210, label="O1", facing="west", output=True))
+        p_sel = c.add(Pin(220, 280, label="SEL", facing="north"))
+
+        c.connect(p_in, "pin", demux, "in")
+        c.connect(demux, "out0", p_out0, "pin")
+        c.connect(demux, "out1", p_out1, "pin")
+        c.connect(p_sel, "pin", demux, "sel")
+
+        tmp_path = os.path.join(self.examples_dir, "test_demux_macro.circ")
+        try:
+            proj.save(tmp_path)
+            r = inspect_circuit(tmp_path, strict=True)
+            self.assertTrue(r.passed, f"Demux macro inspection failed: {r.errors}")
+            self.assertTrue(validate_circ(tmp_path, self.logisim_jar if os.path.exists(self.logisim_jar) else None))
         finally:
             if os.path.exists(tmp_path):
                 os.remove(tmp_path)

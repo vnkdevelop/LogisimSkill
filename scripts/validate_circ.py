@@ -14,7 +14,7 @@ import os
 import re
 import xml.etree.ElementTree as ET
 import subprocess
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 
 
 def parse_coord(coord_str: str) -> Tuple[int, int]:

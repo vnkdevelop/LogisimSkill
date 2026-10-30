@@ -96,7 +96,7 @@ def get_component_port_info(comp_name: str, loc: Tuple[int, int], attrs: Dict[st
             ports["out"] = {"pt": (x, y), "normal": (0, -1)}
             ports["in"] = {"pt": (x, y + gate_size), "normal": (0, 1)}
     elif comp_name in ("AND Gate", "OR Gate", "NAND Gate", "NOR Gate", "XOR Gate", "XNOR Gate"):
-        eff_size = size + (10 if comp_name in ("NAND Gate", "NOR Gate", "XOR Gate", "XNOR Gate") else 0)
+        eff_size = size + (20 if comp_name == "XNOR Gate" else (10 if comp_name in ("NAND Gate", "NOR Gate", "XOR Gate") else 0))
         offsets = get_gate_input_offsets(inputs, size)
         if facing == "east":
             ports["out"] = {"pt": (x, y), "normal": (1, 0)}
@@ -171,12 +171,60 @@ def get_component_port_info(comp_name: str, loc: Tuple[int, int], attrs: Dict[st
         ports["enable"] = {"pt": (x - 10, y), "normal": (-1, 0)}
         for i in range(out_cnt):
             ports[f"out{i}"] = {"pt": (x + 10, y - 10 - 20 * (out_cnt - 1 - i)), "normal": (1, 0)}
+    elif comp_name == "Splitter":
+        fanout = int(attrs.get("fanout", "2"))
+        ports["trunk"] = {"pt": (x, y), "normal": (-1, 0) if facing == "east" else ((1, 0) if facing == "west" else ((0, -1) if facing == "south" else (0, 1)))}
+        for i in range(fanout):
+            if facing == "east":
+                ports[f"out{i}"] = {"pt": (x + 20, y - 10 * (fanout - i)), "normal": (1, 0)}
+            elif facing == "west":
+                ports[f"out{i}"] = {"pt": (x - 20, y - 10 * (fanout - i)), "normal": (-1, 0)}
+            elif facing == "south":
+                ports[f"out{i}"] = {"pt": (x + 10 * (fanout - i), y + 20), "normal": (0, 1)}
+            elif facing == "north":
+                ports[f"out{i}"] = {"pt": (x + 10 * (fanout - i), y - 20), "normal": (0, -1)}
+    elif comp_name == "Buffer":
+        if facing == "east":
+            ports["out"] = {"pt": (x, y), "normal": (1, 0)}
+            ports["in"] = {"pt": (x - 20, y), "normal": (-1, 0)}
+        elif facing == "west":
+            ports["out"] = {"pt": (x, y), "normal": (-1, 0)}
+            ports["in"] = {"pt": (x + 20, y), "normal": (1, 0)}
+        elif facing == "south":
+            ports["out"] = {"pt": (x, y), "normal": (0, 1)}
+            ports["in"] = {"pt": (x, y - 20), "normal": (0, -1)}
+        elif facing == "north":
+            ports["out"] = {"pt": (x, y), "normal": (0, -1)}
+            ports["in"] = {"pt": (x, y + 20), "normal": (0, 1)}
+    elif comp_name in ("Controlled Buffer", "Controlled Inverter"):
+        sz = int(attrs.get("size", "30")) if comp_name == "Controlled Inverter" else 20
+        ctrl = attrs.get("control", "right")
+        ctrl_dy = 10 if ctrl == "right" else -10
+        if facing == "east":
+            ports["out"] = {"pt": (x, y), "normal": (1, 0)}
+            ports["in"] = {"pt": (x - sz, y), "normal": (-1, 0)}
+            ports["ctrl"] = {"pt": (x - (sz // 2 if comp_name == "Controlled Buffer" else 20), y + ctrl_dy), "normal": (0, 1 if ctrl_dy > 0 else -1)}
+        elif facing == "west":
+            ports["out"] = {"pt": (x, y), "normal": (-1, 0)}
+            ports["in"] = {"pt": (x + sz, y), "normal": (1, 0)}
+            ports["ctrl"] = {"pt": (x + (sz // 2 if comp_name == "Controlled Buffer" else 20), y + ctrl_dy), "normal": (0, 1 if ctrl_dy > 0 else -1)}
+        elif facing == "south":
+            ports["out"] = {"pt": (x, y), "normal": (0, 1)}
+            ports["in"] = {"pt": (x, y - sz), "normal": (0, -1)}
+            ports["ctrl"] = {"pt": (x + ctrl_dy, y - (sz // 2 if comp_name == "Controlled Buffer" else 20)), "normal": (1 if ctrl_dy > 0 else -1, 0)}
+        elif facing == "north":
+            ports["out"] = {"pt": (x, y), "normal": (0, -1)}
+            ports["in"] = {"pt": (x, y + sz), "normal": (0, 1)}
+            ports["ctrl"] = {"pt": (x + ctrl_dy, y + (sz // 2 if comp_name == "Controlled Buffer" else 20)), "normal": (1 if ctrl_dy > 0 else -1, 0)}
     elif comp_name in ("Adder", "Subtractor", "Multiplier", "Divider"):
         ports["inA"] = {"pt": (x - 40, y - 10), "normal": (-1, 0)}
         ports["inB"] = {"pt": (x - 40, y + 10), "normal": (-1, 0)}
         ports["out"] = {"pt": (x, y), "normal": (1, 0)}
         ports["cin"] = {"pt": (x - 20, y - 20), "normal": (0, -1)}
         ports["cout"] = {"pt": (x - 20, y + 20), "normal": (0, 1)}
+        if comp_name == "Subtractor":
+            ports["bin"] = {"pt": (x - 20, y - 20), "normal": (0, -1)}
+            ports["bout"] = {"pt": (x - 20, y + 20), "normal": (0, 1)}
     elif comp_name == "Comparator":
         ports["inA"] = {"pt": (x - 40, y - 10), "normal": (-1, 0)}
         ports["inB"] = {"pt": (x - 40, y + 10), "normal": (-1, 0)}
