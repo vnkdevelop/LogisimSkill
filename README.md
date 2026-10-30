@@ -1,112 +1,128 @@
-# LogisimSkill ⚡
+# Logisim Skill ⚡
 
-[![Validation Tests](https://img.shields.io/badge/tests-passing-brightgreen.svg)]()
-[![Logisim Engine](https://img.shields.io/badge/engine-Logisim%202.7.1%20%7C%20Evolution-blue.svg)]()
-[![Python](https://img.shields.io/badge/python-3.8+-blue.svg)]()
-[![License](https://img.shields.io/badge/license-MIT-green.svg)]()
+[![Validation Tests](https://img.shields.io/badge/тесты-пройдены-brightgreen.svg)]()
+[![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)]()
+[![Dependencies](https://img.shields.io/badge/зависимости-чистый%20Python-orange.svg)]()
+[![License](https://img.shields.io/badge/лицензия-MIT-green.svg)]()
 
-**LogisimSkill** is an engineering framework and AI agent skill for programmatically generating, routing, and validating 100% compliant `.circ` digital logic schematics for **Logisim** and **Logisim-evolution**.
+Универсальный инструмент и инженерный скилл для проектирования, синтеза и автоматической проверки цифровых схем формата `.circ` для **Logisim**.
 
-It solves the common problem of AI-generated circuits being misaligned, having diagonal wires, or missing pin coordinates by using the **exact mathematical port geometry** reverse-engineered directly from Logisim's core engine bytecode.
-
----
-
-## ✨ Features
-
-- **Automatic GUI Toolbar & Mappings:** Eliminates the missing toolbar bug in Logisim GUI mode by automatically generating `<toolbar>` (with Poke Tool, Edit Tool, Text Tool) and `<mappings>`.
-- **Exact Component Geometry:** Pin-accurate coordinates for 48+ standard Logisim components across Wiring, Gates, Plexers, Arithmetic, Memory, and I/O.
-- **Strict Manhattan Wire Routing:** Automatically breaks non-aligned connections into purely orthogonal ($X_1=X_2$ or $Y_1=Y_2$) segments with automatic junction creation.
-- **Segmented Bus Routing:** `add_vbus` and `add_hbus` prevent overlapping collinear wires and ensure clean, reliable multi-tap junctions.
-- **Canonical Logic Generators:** Ready-to-use factories for decoders (2-to-4), encoders (8-to-3, 10-to-4, N-to-M), multiplexers (4-to-1, 8-to-1), and demultiplexers (1-to-4, 1-to-8).
-- **Collision-Free Ergonomic Layouts:** Built-in rules for pin spacing ($\ge 30\text{--}40$ px pitch) eliminating text and label overlaps.
-- **10-Pixel Grid Snapping:** Enforces complete alignment with Logisim's internal grid.
-- **Engine-Level Validation:** `validate_circ.py` checks XML validity, grid alignment, absence of diagonal lines, toolbar presence, and tests loading headlessly directly inside Logisim's Java bytecode.
-- **Modular & Clean:** Standard Python API with zero external dependencies (uses standard library `xml.etree`).
+Скилл создан для того, чтобы полностью автоматизировать рутинную работу со схемотехникой: генерацию файлов, точный расчет геометрии контактов, аккуратную трассировку шин и мгновенную проверку схем на отсутствие графических и логических ошибок.
 
 ---
 
-## 🚀 Quickstart
+## 🎯 Зачем нужен этот проект?
 
-### 1. Programmatic Circuit Generation
+При создании схем вручную или программно часто возникают досадные мелочи:
+- Провода смещаются мимо сетки и визуально «висят в воздухе»;
+- В интерфейсе Logisim пропадает верхняя панель инструментов (нельзя переключать сигналы «рукой»);
+- Корпуса элементов и текстовые метки наезжают друг на друга;
+- Случайно появляются диагональные изломы или нежелательные замыкания.
+
+**Logisim Skill** решает эти задачи «из коробки»: обеспечивает строгое выравнивание по сетке, рассчитывает точные координаты каждого вывода и гарантирует, что схема откроется чисто, красиво и будет сразу готова к интерактивной симуляции.
+
+---
+
+## ✨ Ключевые возможности
+
+- 📐 **Идеальная привязка к сетке** — все координаты строго кратны 10 пикселям. Трассировка проводов исключительно ортогональная (под прямым углом, Manhattan routing).
+- 🧩 **Универсальный каталог компонентов** — точные координаты контактов и габариты для вентилей, мультиплексоров, дешифраторов, блоков АЛУ, триггеров, регистров, счетчиков, памяти и периферии ввода-вывода (светодиоды, индикаторы, матрицы, терминал).
+- 🎛️ **Готовая интерактивная панель** — в создаваемые схемы автоматически встраиваются панель инструментов (Poke Tool, инструмент выбора, текст) и привязки мыши.
+- 🚫 **Защита от наложения компонентов** — корпуса микросхем, индикаторов и пинов никогда не пересекаются и не заслоняют друг друга.
+- ⚡ **Естественные пересечения проводов** — провода могут свободно пересекаться под углом 90° без паразитных точек спайки и замыканий.
+- 🔍 **Мгновенная самопроверка схемы** — встроенный инспектор за доли секунды проверяет схему на обрывы, замыкания, коллизии и строит матрицу соединений входов с выходами.
+- 📦 **Zero Dependencies** — работает на чистом стандартном Python без необходимости устанавливать дополнительные пакеты.
+
+---
+
+## 🚀 Быстрый старт
+
+### 1. Создание схемы на Python
+
+Собрать красивую готовую схему можно буквально в несколько строк:
 
 ```python
-from scripts.logisim_builder import (
-    Project, Pin, AndGate, OrGate, NotGate,
-    build_decoder_2to4, build_encoder_8to3,
-    build_multiplexer_4to1, build_demultiplexer_1to4
-)
+from scripts.logisim_builder import Project, Pin, AndGate, XorGate
 
-# Create a project (automatically injects GUI toolbar & mouse mappings)
+# Создаем проект (автоматически добавляет интерактивную панель инструментов)
 proj = Project(name="main")
+c = proj.main
 
-# Generate standard canonical blocks with zero manual routing:
-build_decoder_2to4(proj, name="main", with_enable=True)
-build_encoder_8to3(proj, name="Классический_8_в_3")
-build_multiplexer_4to1(proj, name="Мультиплексор_4_в_1", with_enable=True)
+# Добавляем входы
+a = c.add(Pin(100, 100, label="A"))
+b = c.add(Pin(100, 140, label="B"))
 
-# Or build custom circuits using segmented bus routing:
-sheet = proj.get_or_create_circuit("CustomCircuit")
-pin_a = sheet.add(Pin(100, 100, label="A"))
-pin_b = sheet.add(Pin(100, 140, label="B"))
-and_gate = sheet.add(AndGate(240, 120, inputs=2, size=50))
-out_pin = sheet.add(Pin(320, 120, label="Y", facing="west", output=True))
+# Логические элементы (корпуса размещаются чисто и без лишних меток)
+xor_gate = c.add(XorGate(260, 110, inputs=2, size=50))
+and_gate = c.add(AndGate(260, 190, inputs=2, size=50))
 
-sheet.connect(pin_a, "pin", and_gate, "in0", routing="hv")
-sheet.connect(pin_b, "pin", and_gate, "in1", routing="hv")
-sheet.connect(and_gate, "out", out_pin, "pin")
+# Выходы
+sum_out = c.add(Pin(360, 110, label="Sum", facing="west", output=True))
+carry_out = c.add(Pin(360, 190, label="Carry", facing="west", output=True))
 
-# Save as .circ XML
-proj.save("my_circuit.circ")
+# Соединяем контакты чистыми ортогональными линиями
+c.connect(a, "pin", xor_gate, "in0")
+c.connect(a, "pin", and_gate, "in0")
+c.connect(b, "pin", xor_gate, "in1")
+c.connect(b, "pin", and_gate, "in1")
+c.connect(xor_gate, "out", sum_out, "pin")
+c.connect(and_gate, "out", carry_out, "pin")
+
+# Сохраняем в файл .circ
+proj.save("half_adder.circ")
 ```
 
-### 2. Validating Circuits
+Схема сразу готова: её можно открыть в Logisim, переключать сигналы инструментом «рука» и наблюдать результат работы.
 
-Run the built-in validator against any `.circ` file:
+---
+
+### 2. Проверка схемы инспектором
+
+Чтобы убедиться, что в схеме нет дефектов, паразитных наложений или оборванных проводов, запустите встроенный инспектор:
 
 ```bash
-python scripts/validate_circ.py examples/half_adder.circ
+python scripts/inspect_circ.py half_adder.circ
 ```
 
-To run engine-level headless verification using your local Logisim executable:
+Инспектор выведет наглядный отчет: количество элементов, целостность цепей и логическую таблицу связей входов с выходами.
+
+Для проверки синтаксиса и совместимости XML используйте валидатор:
 
 ```bash
-python scripts/validate_circ.py examples/half_adder.circ /path/to/logisim.jar
+python scripts/validate_circ.py half_adder.circ
 ```
 
 ---
 
-## 📂 Repository Structure
+## 📁 Структура проекта
 
-```
+```text
 LogisimSkill/
-├── SKILL.md                 # Antigravity Agent Skill Specification
-├── README.md                # Project documentation & usage
-├── .gitignore               # Clean repository filter
+├── SKILL.md                 # Полная техническая спецификация для ИИ-агентов
+├── README.md                # Руководство пользователя и описание проекта
 ├── scripts/
-│   ├── logisim_builder.py   # Core logic engine and component factories
-│   └── validate_circ.py     # Static and engine-level circuit validator
-├── examples/
-│   ├── half_adder.circ      # Combinational XOR + AND half adder
-│   ├── decoder_2to4.circ    # Full 2-to-4 binary decoder with NOT and AND gates
-│   └── d_flip_flop_divider.circ # Sequential DFF with inverted feedback
+│   ├── logisim_builder.py   # Конструктор схем и точные фабрики компонентов
+│   ├── inspect_circ.py      # Инспектор топологии, наложений и логики
+│   └── validate_circ.py     # Валидатор XML-структуры и привязки к сетке
+├── examples/                # Набор готовых эталонных схем
 └── tests/
-    └── test_builder.py      # Unit tests & example verification suite
+    └── test_builder.py      # Автоматические тесты генерации и валидации
 ```
 
 ---
 
-## 🛠️ Testing
+## 🧪 Запуск тестов
 
-Run the test suite:
+Для запуска полного набора тестов выполните:
 
 ```bash
 python tests/test_builder.py
 ```
 
-All 4 unit tests generate circuits, validate their geometry, and verify them against the Logisim engine parser.
+Тесты проверяют точность координат выводов, алгоритмы трассировки проводов, отсутствие паразитных наложений и корректность XML.
 
 ---
 
-## 📄 License
+## 📄 Лицензия
 
-MIT License. Designed for students, digital logic designers, and AI coding assistants.
+Проект распространяется под открытой лицензией [MIT](LICENSE). Подходит для учебных задач, лабораторных работ, курсовых проектов и интеграции в интеллектуальные среды разработки.
