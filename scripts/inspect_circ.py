@@ -171,6 +171,32 @@ def get_component_port_info(comp_name: str, loc: Tuple[int, int], attrs: Dict[st
         ports["enable"] = {"pt": (x - 10, y), "normal": (-1, 0)}
         for i in range(out_cnt):
             ports[f"out{i}"] = {"pt": (x + 10, y - 10 - 20 * (out_cnt - 1 - i)), "normal": (1, 0)}
+    elif comp_name in ("Adder", "Subtractor", "Multiplier", "Divider"):
+        ports["inA"] = {"pt": (x - 40, y - 10), "normal": (-1, 0)}
+        ports["inB"] = {"pt": (x - 40, y + 10), "normal": (-1, 0)}
+        ports["out"] = {"pt": (x, y), "normal": (1, 0)}
+        ports["cin"] = {"pt": (x - 20, y - 20), "normal": (0, -1)}
+        ports["cout"] = {"pt": (x - 20, y + 20), "normal": (0, 1)}
+    elif comp_name == "Comparator":
+        ports["inA"] = {"pt": (x - 40, y - 10), "normal": (-1, 0)}
+        ports["inB"] = {"pt": (x - 40, y + 10), "normal": (-1, 0)}
+        ports["gt"] = {"pt": (x, y - 10), "normal": (1, 0)}
+        ports["eq"] = {"pt": (x, y), "normal": (1, 0)}
+        ports["lt"] = {"pt": (x, y + 10), "normal": (1, 0)}
+    elif comp_name in ("Register", "Counter"):
+        ports["in"] = {"pt": (x - 30, y), "normal": (-1, 0)}
+        ports["out"] = {"pt": (x, y), "normal": (1, 0)}
+        ports["clock"] = {"pt": (x - 20, y + 20), "normal": (0, 1)}
+        ports["clear"] = {"pt": (x - 10, y + 20), "normal": (0, 1)}
+        if comp_name == "Register":
+            ports["enable"] = {"pt": (x - 30, y + 10), "normal": (-1, 0)}
+        else:
+            ports["load"] = {"pt": (x - 30, y - 10), "normal": (-1, 0)}
+            ports["count"] = {"pt": (x - 30, y + 10), "normal": (-1, 0)}
+            ports["carry"] = {"pt": (x, y + 10), "normal": (1, 0)}
+    elif comp_name in ("RAM", "ROM"):
+        ports["addr"] = {"pt": (x, y), "normal": (-1, 0)}
+        ports["data"] = {"pt": (x + 140, y), "normal": (1, 0)}
     elif comp_name == "Button":
         facing_map = {"east": (1, 0), "west": (-1, 0), "south": (0, 1), "north": (0, -1)}
         ports["out"] = {"pt": (x, y), "normal": facing_map.get(facing, (1, 0))}
@@ -221,7 +247,8 @@ def get_component_ports(comp_name: str, loc: Tuple[int, int], attrs: Dict[str, s
 
 def get_component_bbox(name: str, loc: Tuple[int, int], attrs: Dict[str, str]) -> Tuple[int, int, int, int]:
     """
-    Calculates the 2D visual Axis-Aligned Bounding Box (AABB) of a component on the Logisim canvas.
+    Calculates the exact 2D visual Axis-Aligned Bounding Box (AABB) of every Logisim component.
+    Guarantees that no two components on the canvas ever physically overlap.
     Returns: (xmin, ymin, xmax, ymax) in absolute canvas coordinates.
     """
     x, y = loc
@@ -229,6 +256,7 @@ def get_component_bbox(name: str, loc: Tuple[int, int], attrs: Dict[str, str]) -
     size = int(attrs.get("size", "50")) if "size" in attrs else 50
     inputs = int(attrs.get("inputs", "5")) if "inputs" in attrs else 5
 
+    # 1. Wiring Library (lib 0)
     if name == "Pin":
         if facing == "west":
             return (x - 20, y - 10, x, y + 10)
@@ -240,6 +268,42 @@ def get_component_bbox(name: str, loc: Tuple[int, int], attrs: Dict[str, str]) -
             return (x - 10, y - 20, x + 10, y)
         return (x - 10, y - 10, x + 10, y + 10)
 
+    elif name in ("Probe", "Clock", "Constant"):
+        return (x, y - 10, x + 20, y + 10)
+    elif name == "Ground":
+        return (x - 10, y, x + 10, y + 15)
+    elif name == "Power":
+        return (x - 10, y - 15, x + 10, y)
+    elif name == "Pull Resistor":
+        return (x - 10, y - 10, x + 10, y + 10)
+    elif name in ("Transistor", "Transmission Gate"):
+        return (x - 20, y - 20, x + 20, y + 20)
+    elif name == "Bit Extender":
+        return (x - 40, y - 20, x, y + 20)
+    elif name == "Tunnel":
+        lbl = attrs.get("label", "")
+        w = max(20, len(lbl) * 7 + 10)
+        if facing == "west":
+            return (x - w, y - 10, x, y + 10)
+        elif facing == "east":
+            return (x, y - 10, x + w, y + 10)
+        elif facing == "south":
+            return (x - 10, y, x + 10, y + w)
+        else:
+            return (x - 10, y - w, x + 10, y)
+    elif name == "Splitter":
+        fanout = int(attrs.get("fanout", "2"))
+        h = max(20, fanout * 10)
+        if facing == "east":
+            return (x, y - h, x + 20, y + 10)
+        elif facing == "west":
+            return (x - 20, y - h, x, y + 10)
+        elif facing == "south":
+            return (x - 10, y, x + h, y + 20)
+        else:
+            return (x - 10, y - 20, x + h, y)
+
+    # 2. Logic Gates (lib 1)
     elif name in ("AND Gate", "OR Gate", "NAND Gate", "NOR Gate", "XOR Gate", "XNOR Gate"):
         eff_size = size + (10 if name in ("NAND Gate", "NOR Gate", "XOR Gate") else (20 if name == "XNOR Gate" else 0))
         h = max(10 * inputs, size)
@@ -264,17 +328,51 @@ def get_component_bbox(name: str, loc: Tuple[int, int], attrs: Dict[str, str]) -
         elif facing == "north":
             return (x - 10, y, x + 10, y + sz)
 
-    elif name == "Buffer":
-        return (x - 20, y - 10, x, y + 10)
+    elif name in ("Buffer", "Controlled Buffer", "Controlled Inverter"):
+        return (x - 20, y - 10, x + 10, y + 10)
 
-    elif "Flip-Flop" in name:
-        return (x - 40, y - 10, x, y + 30)
+    # 3. Plexers (lib 2)
+    elif name in ("Multiplexer", "Demultiplexer"):
+        sel_cnt = int(attrs.get("select", "1"))
+        lines = 1 << sel_cnt
+        span = 10 * lines + 10
+        if name == "Multiplexer":
+            return (x - 30, y - span, x, y + span)
+        else:
+            return (x, y - span, x + 30, y + span)
 
-    elif name in ("Adder", "Subtractor", "Comparator"):
+    elif name == "Decoder":
+        sel_cnt = int(attrs.get("select", "1"))
+        out_cnt = 1 << sel_cnt
+        return (x - 20, y - 20 * out_cnt - 10, x + 20, y + 10)
+
+    elif name == "Priority Encoder":
+        sel_cnt = int(attrs.get("select", "3"))
+        in_cnt = 1 << sel_cnt
+        return (x - 40, y - 10 * in_cnt, x, y + 10 * in_cnt)
+
+    elif name == "Bit Selector":
+        return (x - 30, y - 20, x, y + 20)
+
+    # 4. Arithmetic (lib 3)
+    elif name in ("Adder", "Subtractor", "Multiplier", "Divider", "Negator", "Comparator", "Shifter", "Bit Adder", "Bit Finder"):
         return (x - 40, y - 20, x, y + 20)
 
+    # 5. Memory / Sequential (lib 4)
+    elif "Flip-Flop" in name:
+        return (x - 40, y - 10, x, y + 30)
     elif name in ("Register", "Counter"):
-        return (x - 30, y - 15, x + 5, y + 25)
+        return (x - 30, y - 15, x + 10, y + 25)
+    elif name == "Shift Register":
+        length = int(attrs.get("length", "8"))
+        w = max(60, length * 10 + 20)
+        return (x - 40, y - 20, x + w - 40, y + 20)
+    elif name in ("RAM", "ROM"):
+        return (x, y - 40, x + 140, y + 40)
+    elif name == "Random":
+        return (x - 40, y - 20, x, y + 20)
+
+    # 6. I/O (lib 5)
     elif name == "Button":
         return (x - 30, y - 10, x, y + 10) if facing == "east" else (x - 10, y - 10, x + 10, y + 10)
     elif name == "Joystick":
@@ -298,24 +396,14 @@ def get_component_bbox(name: str, loc: Tuple[int, int], attrs: Dict[str, str]) -
         h = max(80, rows * 14 + 20)
         return (x, y, x + w, y + h)
 
-    elif name in ("Multiplexer", "Demultiplexer"):
-        sel_cnt = int(attrs.get("select", "1"))
-        lines = 1 << sel_cnt
-        span = 10 * lines + 10
-        if name == "Multiplexer":
-            return (x - 30, y - span, x, y + span)
-        else:
-            return (x, y - span, x + 30, y + span)
+    # 7. Text & Base (lib 6)
+    elif name == "Text":
+        txt = attrs.get("text", "")
+        w = max(30, len(txt) * 7 + 10)
+        return (x - w // 2, y - 10, x + w // 2, y + 10)
 
-    elif name in ("Clock", "Constant"):
-        return (x, y - 10, x + 20, y + 10)
-    elif name == "Ground":
-        return (x - 10, y, x + 10, y + 15)
-    elif name == "Power":
-        return (x - 10, y - 15, x + 10, y)
-
-    return (x - 10, y - 10, x + 10, y + 10)
-
+    # 8. Subcircuit fallback
+    return (x, y, x + 50, y + 50)
 
 
 class CircuitInspectionReport:

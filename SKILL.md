@@ -194,26 +194,27 @@ Connecting wires directly into component pins tangentially or along the edge of 
 
 ---
 
-### 3.8 Footprint & Clearance Rules for Large I/O Components (Габариты больших элементов и защита от наложений)
-Unlike standard 2-input logic gates ($50 \times 50$ px) or discrete flip-flops ($40 \times 40$ px), peripheral and interactive I/O components have **substantially larger physical footprints** on the canvas:
-- **TTY Terminal (`lib="5" name="TTY"`):**
-  - Physical Footprint: Width $\approx \max(160, \text{cols} \times 8 + 20)$ px, Height $\approx \max(80, \text{rows} \times 14 + 20)$ px.
-  - Standard $32 \times 8$ terminal footprint is **$280 \times 140$ px**!
-  - **Spacing Rule:** Adjacent components must maintain $\Delta X \ge 320$ px and $\Delta Y \ge 180$ px clearance.
-- **LED Matrix (`lib="5" name="DotMatrix"`):**
-  - Physical Footprint: Width $= \text{matrixcols} \times 10 + 10$ px, Height $= \text{matrixrows} \times 10 + 10$ px.
-  - An $8 \times 8$ matrix is $90 \times 90$ px; a $16 \times 16$ matrix is **$170 \times 170$ px**.
-  - **Spacing Rule:** Reserve at least 30 px clearance around the full grid envelope.
-- **Keyboard (`lib="5" name="Keyboard"`):**
-  - Physical Footprint: **$140 \times 40$ px** (extends horizontally to display the typing buffer).
-  - **Spacing Rule:** Reserve a horizontal clearance corridor of $\ge 160$ px, and $\ge 40$ px vertical space underneath for south bus exits (`re`, `clr`, `avail`, `data`).
-- **Joystick (`lib="5" name="Joystick"`):**
-  - Physical Footprint: **$60 \times 60$ px** square.
-  - **Spacing Rule:** Wires exit exclusively to the West. Leave at least 30-40 px corridor on the left.
-- **7-Segment & Hex Displays (`7-Segment Display`, `Hex Digit Display`):**
-  - Physical Footprint: **$40 \times 70$ px**.
-  - In multi-digit readout arrays, maintain a pitch of **$\Delta X \ge 50$ px** (minimum 10 px clearance between adjacent digits; never overlap display bodies).
-- **Zero Wire Penetration for Large Blocks:** Wires for other signals must NEVER pass through the bounding box of any large I/O block. All buses must be routed along dedicated perimeter corridors with $\ge 20$ px clearance around the block.
+### 3.8 Universal Component Footprints & Anti-Overlap Rules (Полный каталог габаритов всех элементов и защита от наложений)
+Every component in Logisim possesses a physical 2D visual footprint (Axis-Aligned Bounding Box, AABB). Placing any two components with intersecting bounding boxes ($ix > 0$ and $iy > 0$) causes a visual collision defect and immediate rejection during schematic inspection.
+
+| Library / Component | Physical Footprint (AABB) | Minimum Center Pitch | Dedicated Routing & Buffer Rules |
+| :--- | :--- | :--- | :--- |
+| **Pins (Inputs / Outputs)** | $20 \times 20$ px | $\Delta Y \ge 30\text{--}40$ px, $\Delta X \ge 40$ px | Prohibit $\Delta \le 10$ px overlaps; keep pin bodies and labels distinct. |
+| **Standard Logic Gates** | $50 \times \max(50, 10 \cdot inputs)$ px | $\Delta Y \ge \text{Height} + 30$ px | Multi-input gates expand vertically ($10 \times K$ px); corridor $\ge 20$ px. |
+| **Narrow Gates / Inverters** | $30 \times 20$ px (NOT), $30 \times 30$ px | $\Delta Y \ge 30$ px | $10\text{--}20$ px lead-in / lead-out before orthogonal turn. |
+| **ALU / Arithmetic Modules** | $40 \times 40$ px (`Adder`, `Sub`, `Comp`) | $\Delta X \ge 80$ px, $\Delta Y \ge 60$ px | Inputs at $X-40$, output at $X$, carry at $Y \pm 20$. |
+| **Registers & Counters** | $40 \times 40$ px (`Register`, `Counter`) | $\Delta X \ge 70$ px, $\Delta Y \ge 60$ px | Clock/Clear at south edge ($Y+20$); control at west. |
+| **Memory Arrays (`RAM`, `ROM`)** | **$140 \times 80$ px** | $\Delta X \ge 180$ px, $\Delta Y \ge 120$ px | Massive data block; allocate wide perimeter routing corridor. |
+| **Shift Register** | $(length \cdot 10 + 20) \times 40$ px | $\Delta X \ge W + 40$ px | Multi-stage serial/parallel shift block. |
+| **Multiplexers / Decoders** | $30 \times (20 \cdot 2^{select} + 10)$ px | $\Delta Y \ge \text{Span} + 40$ px | Large address trees expand exponentially with select width. |
+| **Splitters** | $20 \times (10 \cdot fanout + 10)$ px | $\Delta Y \ge 10 \cdot fanout + 30$ px | Multi-wire fanout trunk; route each branch orthogonally. |
+| **TTY Terminal (`TTY`)** | **$280 \times 140$ px** (at $32 \times 8$) | $\Delta X \ge 320$ px, $\Delta Y \ge 180$ px | Adjacent components maintain $\ge 40$ px margin from right/bottom. |
+| **LED Matrix (`DotMatrix`)** | $(cols \cdot 10 + 10) \times (rows \cdot 10 + 10)$ px | $\Delta X, \Delta Y \ge Size + 40$ px | $8 \times 8$ is $90 \times 90$ px; $16 \times 16$ is **$170 \times 170$ px**. |
+| **Keyboard (`Keyboard`)** | **$140 \times 40$ px** | $\Delta X \ge 160$ px, $\Delta Y \ge 80$ px | Reserve $\ge 40$ px underneath for south pins (`re`, `clr`, `avail`, `data`). |
+| **Joystick (`Joystick`)** | **$60 \times 60$ px** | $\Delta X \ge 80$ px, $\Delta Y \ge 80$ px | Outputs exit strictly West; reserve $\ge 30$ px left corridor. |
+| **7-Segment & Hex Displays** | **$40 \times 70$ px** | $\Delta X \ge 50$ px | Multi-digit arrays require $\ge 10$ px clear gap between bodies. |
+
+- **Zero Wire Penetration for All Components:** Wires MUST NEVER pass through the bounding box of any component without terminating at a legitimate port. All bypass lines must route along dedicated external corridors with $\ge 20$ px clearance.
 
 ## 4. Ground-Truth Component Pin Geometry & Library Index
 
