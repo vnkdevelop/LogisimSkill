@@ -216,6 +216,19 @@ Every component in Logisim possesses a physical 2D visual footprint (Axis-Aligne
 
 - **Zero Wire Penetration for All Components:** Wires MUST NEVER pass through the bounding box of any component without terminating at a legitimate port. All bypass lines must route along dedicated external corridors with $\ge 20$ px clearance.
 
+### 3.9 Rational Spacing Principle: Components vs Wires (Принцип разумных отступов: компоненты против проводов)
+To prevent sparse, bloated schematics with empty dead space, strictly distinguish between **component bodies** and **wire routing**:
+
+1. **Non-Overlap Applies Strictly to COMPONENT BODIES (Запрет наложения действует строго на ЭЛЕМЕНТЫ):**
+   - The visual bodies of logic gates, flip-flops, multiplexers, arithmetic modules, displays, and pins must NEVER collide or intersect ($ix > 0$ and $iy > 0$).
+   - Wires must NEVER cut through the interior bounding box of any component.
+2. **Wires May Cross Freely (Провода могут свободно пересекаться под $90^\circ$):**
+   - Perpendicular crossings (horizontal wire crossing a vertical wire) do NOT create junction dots and do NOT short-circuit in Logisim.
+   - Wire crossings are natural, standard, and inevitable in digital schematics. Do NOT add artificial offsets, loops, or detours to dodge wire crossings.
+3. **No Excessive Offsets Between Multiple Wire Lines (Никаких лишних отступов между параллельными проводами):**
+   - Multiple parallel wire runs (buses, adjacent control lines) can run at the minimal grid pitch of **$10\text{ px}$** (adjacent grid cells: $Y, Y+10, Y+20$ or $X, X+10, X+20$).
+   - Do NOT add redundant $20\text{--}40\text{ px}$ gaps between parallel wires where simple $10\text{ px}$ spacing is clean and readable.
+
 ## 4. Ground-Truth Component Pin Geometry & Library Index
 
 For a component placed at anchor `loc="(X,Y)"`, its pin positions are calculated as `(X + dx, Y + dy)`.
@@ -407,11 +420,14 @@ main_c.connect(fa2, "Cout", fa3, "Cin")
 - **Problem:** Routing a wire that turns directly on the coordinate of a component pin (0px lead-in/lead-out), causing the wire to run tangentially along the side of the component or drop vertically right off the tip of an inverter.
 - **Strict Rule:** Every pin connection MUST be strictly perpendicular (normal) to the component boundary. Provide a clean 10-20px lead-in or lead-out segment before any orthogonal turn.
 
-### 7.7 Pitfall 7: Collector Gate Channel Overlap & Accidental Short-Circuits
-- **Problem:** When collecting multiple gate outputs into a multi-input OR gate, routing multiple signals through the same vertical channel or allowing horizontal output lines to cross vertical channels of other gates causes Logisim to generate junction solder dots.
-- **Strict Rule (Staircase Channel Routing):**
-  - Every connection into a collector gate MUST have its own dedicated, strictly unique vertical channel $X_i$.
-  - Use nested staircase routing: outer gates turn at outer $X$ channels; inner gates turn at inner $X$ channels. Zero output lines may intersect or share coordinates.
+### 7.7 Pitfall 7: Collinear Channel Overlap vs Orthogonal Wire Crossings (Пересечения проводов vs замыкания коллинеарных каналов)
+- **Clarification on Wire Crossings (Пересечение проводов разрешено):**
+  - In Logisim, when one horizontal wire crosses a vertical wire perpendicularly at $90^\circ$, **it DOES NOT connect and DOES NOT create a solder dot**.
+  - Crossing wires are completely standard, safe, and inevitable in digital logic (data/control buses, multiplexers, matrix encoders).
+  - **No Unnecessary Detours/Offsets:** Never add bloated detours, wide empty corridors, or artificial offsets to avoid crossing wires. Wires may cross each other freely.
+- **The True Short-Circuit Bug (Collinear Channel Sharing):**
+  - An accidental short occurs ONLY when two independent outputs turn onto the **exact same collinear channel** (e.g., Gate 1 output and Gate 2 output both turn down along the identical vertical line $X = 250$).
+  - **Strict Rule:** Each gate output must have its own dedicated channel coordinate before joining a destination port. But perpendicular crossings across other channels are 100% valid.
 
 ### 7.8 Pitfall 8: Component Bounding Box Overlap & Insufficient Pin Pitch (Ошибка наложения корпусов компонентов и меток)
 - **Problem:** Placing adjacent pins with $\Delta Y = 10\text{ px}$ or $\Delta X = 10\text{ px}$. Since a Pin symbol has a 20 px diameter footprint, placing pins closer than 20 px causes their circle bodies and text labels to physically collide and merge into an unreadable blob (e.g. two adjacent output pins placed with insufficient 10 px clearance).
